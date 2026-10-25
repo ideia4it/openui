@@ -19,6 +19,10 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
     end
 
     @impl true
+    def update(%{openui_refresh: query_id}, socket) do
+      {:ok, guarded(socket, &refresh(&1, query_id))}
+    end
+
     def update(assigns, socket) do
       socket =
         assign(socket, Map.take(assigns, [:id, :components, :tool_provider, :class, :unknown]))
@@ -54,6 +58,27 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
     end
 
     def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+    @impl true
+    def handle_async({:openui_query, query_id, args}, result, socket) do
+      {:noreply,
+       guarded(
+         socket,
+         &apply_result(&1, fn runtime ->
+           Runtime.query_result(runtime, query_id, args, tool_result(result))
+         end)
+       )}
+    end
+
+    def handle_async({:openui_mutation, run_ref}, result, socket) do
+      {:noreply,
+       guarded(
+         socket,
+         &apply_result(&1, fn runtime ->
+           Runtime.mutation_result(runtime, run_ref, tool_result(result))
+         end)
+       )}
+    end
 
     # Last line of defense (language.md, section 10): a failure of this code,
     # or a broken components module, empties the program instead of crashing
@@ -178,7 +203,73 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
       socket
     end
 
-    defp run_effect(_effect, socket), do: socket
+    defp run_effect({:run_query, query_id, tool, args}, socket) do
+      provider = socket.assigns.tool_provider
+
+      start_async(socket, {:openui_query, query_id, args}, fn ->
+        call_tool(provider, tool, args)
+      end)
+    end
+
+    defp run_effect({:run_mutation, run_ref, tool, args}, socket) do
+      provider = socket.assigns.tool_provider
+      start_async(socket, {:openui_mutation, run_ref}, fn -> call_tool(provider, tool, args) end)
+    end
+
+    defp run_effect({:schedule_refresh, query_id, seconds}, socket) do
+      send_update_after(
+        __MODULE__,
+        [id: socket.assigns.id, openui_refresh: query_id],
+        round(seconds * 1000)
+      )
+
+      socket
+    end
+
+    defp refresh(socket, query_id) do
+      {runtime, effects} = Runtime.refresh(socket.assigns.runtime, query_id)
+
+      socket
+      |> assign(runtime: runtime)
+      |> run_effects(effects)
+      |> rerender()
+    end
+
+    defp apply_result(socket, fun) do
+      {runtime, effects} = fun.(socket.assigns.runtime)
+
+      socket
+      |> assign(runtime: runtime)
+      |> run_effects(effects)
+      |> rerender()
+    end
+
+    # The tool runs in its own process. An exception there becomes the error
+    # of its query or mutation instead of a crash report.
+    defp call_tool(nil, _tool, _args), do: {:error, {:tool_not_found, []}}
+
+    defp call_tool(provider, tool, args) when is_map(provider) do
+      case Map.fetch(provider, tool) do
+        {:ok, fun} -> safely(fn -> fun.(args) end)
+        :error -> {:error, {:tool_not_found, provider |> Map.keys() |> Enum.sort()}}
+      end
+    end
+
+    defp call_tool(provider, tool, args) when is_function(provider, 2),
+      do: safely(fn -> provider.(tool, args) end)
+
+    defp safely(fun) do
+      case fun.() do
+        {:ok, _data} = ok -> ok
+        {:error, _reason} = error -> error
+        data -> {:ok, data}
+      end
+    rescue
+      exception -> {:error, Exception.message(exception)}
+    end
+
+    defp tool_result({:ok, result}), do: result
+    defp tool_result({:exit, reason}), do: {:error, {:exit, reason}}
 
     defp notify(socket, payload), do: send(self(), {:openui, socket.assigns.id, payload})
 

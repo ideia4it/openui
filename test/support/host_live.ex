@@ -10,7 +10,7 @@ defmodule OpenUI.Test.HostLive do
        test_pid: session["test_pid"],
        response: session["response"],
        streaming: session["streaming"],
-       tools: session["tools"],
+       tools: OpenUI.LiveCase.tools(session["tools_id"]),
        components: session["components"]
      )}
   end

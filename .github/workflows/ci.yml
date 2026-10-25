@@ -50,8 +50,6 @@ jobs:
 
   dialyzer:
     runs-on: ubuntu-latest
-    env:
-      MIX_ENV: test
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
