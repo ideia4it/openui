@@ -49,6 +49,24 @@ defmodule Mix.Tasks.Openui.Gen.SpecTest do
     end
   end
 
+  @tag :tmp_dir
+  test "fails the check naming a committed spec that is not JSON or has sections of the wrong type",
+       %{tmp_dir: dir} do
+    out = Path.join(dir, "library.json")
+
+    File.write!(out, ~S|{"schema": 5, "components": []}|)
+
+    assert_raise Mix.Error,
+                 ~r/library\.json is not a valid LibrarySpec:\ncomponents must be an object\nschema must be an object$/,
+                 fn -> Spec.run(["OpenUI.Test.ExampleLibrary", "--out", out, "--check"]) end
+
+    File.write!(out, "<<<<<<< HEAD")
+
+    assert_raise Mix.Error, ~r/library\.json is not a valid LibrarySpec:\ninvalid JSON/, fn ->
+      Spec.run(["OpenUI.Test.ExampleLibrary", "--out", out, "--check"])
+    end
+  end
+
   test "refuses to run without one module and an --out path" do
     assert_raise Mix.Error, ~r/Usage: mix openui.gen.spec/, fn ->
       Spec.run(["OpenUI.Test.ExampleLibrary"])

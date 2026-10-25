@@ -10,7 +10,7 @@ defmodule OpenUI.Library do
 
   alias OpenUI.JSON
   alias OpenUI.JSON.Object
-  alias OpenUI.Library.{Callable, Component, Group, Prop, Rules}
+  alias OpenUI.Library.{Callable, Component, Group, Prop, Rules, SpecShape}
 
   @derive {Inspect, only: [:id, :version, :root]}
   defstruct [
@@ -85,10 +85,11 @@ defmodule OpenUI.Library do
   end
 
   def from_spec(%Object{} = spec, opts) do
-    library = read_spec(spec, Keyword.get(opts, :functions, %{}))
-
-    case Rules.check(library) do
-      [] -> {:ok, library}
+    with [] <- SpecShape.problems(spec),
+         library = read_spec(spec, Keyword.get(opts, :functions, %{})),
+         [] <- Rules.check(library) do
+      {:ok, library}
+    else
       problems -> {:error, problems}
     end
   end
@@ -137,18 +138,18 @@ defmodule OpenUI.Library do
           classify
         ),
       actions: read_callables(field(schema, "actions"), field(spec, "actions"), %{}, classify),
-      groups: Enum.map(Object.get(spec, "componentGroups", []), &read_group/1),
+      groups: Enum.map(get(spec, "componentGroups", []), &read_group/1),
       spec: spec
     }
   end
 
   defp read_component(name, defs, signatures, classify) do
     prompt = field(signatures, name)
-    signature = Object.get(prompt, "signature", "")
+    signature = get(prompt, "signature", "")
 
     %Component{
       name: name,
-      description: Object.get(prompt, "description", ""),
+      description: get(prompt, "description", ""),
       signature: signature,
       props: read_props(field(defs, name), signature, classify)
     }
@@ -159,11 +160,11 @@ defmodule OpenUI.Library do
       schema = field(schemas, name)
       prompt = field(prompts, name)
       returns = Object.get(schema, "returns")
-      signature = Object.get(prompt, "signature", "")
+      signature = get(prompt, "signature", "")
 
       %Callable{
         name: name,
-        description: Object.get(schema, "description") || Object.get(prompt, "description", ""),
+        description: Object.get(schema, "description") || get(prompt, "description", ""),
         signature: signature,
         params: read_props(field(schema, "params"), signature, classify),
         returns: returns && JSON.to_plain(returns),
@@ -173,11 +174,11 @@ defmodule OpenUI.Library do
   end
 
   defp read_props(object_schema, signature, classify) do
-    required = Object.get(object_schema, "required", [])
+    required = get(object_schema, "required", [])
     bindable = bindable_names(signature)
 
     for {name, prop_schema} <- field(object_schema, "properties").pairs do
-      plain = JSON.to_plain(prop_schema)
+      plain = JSON.to_plain(prop_schema || %Object{})
 
       %Prop{
         name: name,
@@ -193,8 +194,8 @@ defmodule OpenUI.Library do
   defp read_group(group) do
     %Group{
       name: Object.get(group, "name"),
-      components: Object.get(group, "components", []),
-      notes: Object.get(group, "notes", [])
+      components: get(group, "components", []),
+      notes: get(group, "notes", [])
     }
   end
 
@@ -222,8 +223,10 @@ defmodule OpenUI.Library do
   defp ref_name("#/$defs/" <> name), do: name
   defp ref_name(_ref), do: nil
 
-  # A spec may leave any section out; read a missing one as an empty object.
-  defp field(%Object{} = object, key), do: Object.get(object, key) || %Object{}
+  # A spec may leave any section out or null; SpecShape has already refused one
+  # of the wrong type, so a missing one reads as its default.
+  defp get(%Object{} = object, key, default), do: Object.get(object, key) || default
+  defp field(object, key), do: get(object, key, %Object{})
 
   defp keys(%Object{} = object), do: Object.keys(object)
 end

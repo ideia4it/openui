@@ -65,6 +65,74 @@ defmodule OpenUI.LibraryTest do
     assert {:error, ["invalid JSON: " <> _reason]} = OpenUI.Library.from_spec(~S|{"root": |)
   end
 
+  test "refuses a library.json whose sections have the wrong type, naming each one" do
+    assert OpenUI.Library.from_spec(~S|{"schema": 5}|) == {:error, ["schema must be an object"]}
+
+    spec = ~S"""
+    {"components": {"Card": {"signature": 3, "description": "A card"}},
+     "functions": [],
+     "actions": "none",
+     "componentGroups": {"name": "Layout"},
+     "root": 1,
+     "schema": {"properties": [],
+                "$defs": {"Card": {"properties": {"title": "string"}, "required": "title"}},
+                "functions": {"Percent": {"description": 7, "params": []}},
+                "actions": {"Copy": "text"}}}
+    """
+
+    assert {:error, problems} = OpenUI.Library.from_spec(spec)
+
+    assert Enum.sort(problems) == [
+             "actions must be an object",
+             "componentGroups must be a list",
+             "components.Card.signature must be a string",
+             "functions must be an object",
+             "root must be a string",
+             "schema.$defs.Card.properties.title must be an object",
+             "schema.$defs.Card.required must be a list",
+             "schema.actions.Copy must be an object",
+             "schema.functions.Percent.description must be a string",
+             "schema.functions.Percent.params must be an object",
+             "schema.properties must be an object"
+           ]
+  end
+
+  test "refuses a component group or a group entry of the wrong type" do
+    spec = ~S"""
+    {"components": {"Card": {"signature": "Card()"}},
+     "componentGroups": [{"name": "Layout", "components": ["Card", 2], "notes": "short"}, "Charts"]}
+    """
+
+    assert {:error, problems} = OpenUI.Library.from_spec(spec)
+
+    assert Enum.sort(problems) == [
+             "componentGroups[0].components[1] must be a string",
+             "componentGroups[0].notes must be a list",
+             "componentGroups[1] must be an object"
+           ]
+  end
+
+  test "reads a section left null as a missing one" do
+    spec = ~S"""
+    {"components": {"Card": {"signature": null, "description": null}, "Tag": null},
+     "componentGroups": [{"name": "Layout", "components": null, "notes": null}],
+     "schema": {"properties": {"Tag": {"$ref": "#/$defs/Tag"}},
+                "$defs": {"Card": {"properties": null, "required": null},
+                          "Tag": {"properties": {"label": null}}},
+                "functions": null}}
+    """
+
+    assert {:ok, library} = OpenUI.Library.from_spec(spec)
+
+    assert %{description: "", signature: "", props: []} =
+             OpenUI.Library.component(library, "Card")
+
+    assert [%{name: "label", schema: %{}, kind: :value}] =
+             OpenUI.Library.component(library, "Tag").props
+
+    assert [%{name: "Layout", components: [], notes: []}] = library.groups
+  end
+
   test "refuses every name the language reserves, built-ins included" do
     reserved = Rules.reserved_names()
 
