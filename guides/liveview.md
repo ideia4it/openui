@@ -89,7 +89,7 @@ end
 ```
 
 - `%OpenUI.Event{}`: `@ToAssistant` (`type: "continue_conversation"`), `@OpenUrl` (`"open_url"`) and actions of your library (their own name). It carries the form state as of when the action ran.
-- `{:state, state}`: the person changed something. Store it to restore the program later.
+- `{:state, state}`: the person changed something. Store it to restore the program later, including after a reconnect: the program state lives in the LiveComponent, so without it a reconnect loses what the person typed.
 - `{:errors, errors}`: the error list changed; `[]` means it recovered. Send it back to the model in the next request when you want it to fix its program.
 
 ## Query and Mutation
