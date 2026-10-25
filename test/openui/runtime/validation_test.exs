@@ -25,4 +25,20 @@ defmodule OpenUI.Runtime.ValidationTest do
     assert Validation.validate("abc", %{"pattern" => "(unclosed"}) == :ok
     assert Validation.validate(%{}, %{"minLength" => 2}) == :ok
   end
+
+  test "fails numeric for a value that is neither a number nor text" do
+    assert Validation.validate(["1"], %{"numeric" => true}) == {:error, "numeric"}
+    assert Validation.validate(true, %{"numeric" => true}) == {:error, "numeric"}
+  end
+
+  test "applies length and pattern rules to text only and min and max to numbers only" do
+    assert Validation.validate(["a", "b", "c"], %{"maxLength" => 2, "minLength" => 5}) == :ok
+    assert Validation.validate(42, %{"pattern" => "^a"}) == :ok
+    assert Validation.validate("many", %{"min" => 1, "max" => 0}) == :ok
+  end
+
+  test "fails url for text that does not parse as a URL" do
+    assert Validation.validate("http://exa mple.com", %{"url" => true}) == {:error, "url"}
+    assert Validation.validate("https://salao365.com/agenda", %{"url" => true}) == :ok
+  end
 end
