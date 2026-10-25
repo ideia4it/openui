@@ -56,45 +56,55 @@ defmodule OpenUI.Serializer do
 
   @doc "Serializes an expression, adding the parentheses its grouping needs."
   @spec expression(OpenUI.Parser.Expression.ast()) :: String.t()
-  def expression({:string, string}), do: string_literal(string)
-  def expression({:number, number}), do: Value.stringify(number)
-  def expression({:boolean, boolean}), do: to_string(boolean)
-  def expression(:null), do: "null"
-  def expression({:literal, value}), do: value |> value(nil, []) |> elem(0)
-  def expression({kind, name}) when kind in [:ref, :state, :unresolved], do: name
-  def expression({:runtime_ref, name, _kind}), do: name
-  def expression({:array, items}), do: "[" <> Enum.map_join(items, ", ", &expression/1) <> "]"
+  def expression(ast), do: expression(ast, nil)
 
-  def expression({:object, entries}),
-    do:
-      "{" <>
-        Enum.map_join(entries, ", ", fn {key, value} -> "#{key}: #{expression(value)}" end) <> "}"
+  # An @Each item stands in for its loop variable inside a @Set value, and a
+  # component or action item needs the library to order its arguments.
+  # Parser trees hold no item, so `expression/1` needs no library.
+  defp expression({:literal, value}, library), do: value |> value(library, []) |> elem(0)
+  defp expression({:string, string}, _library), do: string_literal(string)
+  defp expression({:number, number}, _library), do: Value.stringify(number)
+  defp expression({:boolean, boolean}, _library), do: to_string(boolean)
+  defp expression(:null, _library), do: "null"
+  defp expression({kind, name}, _library) when kind in [:ref, :state, :unresolved], do: name
+  defp expression({:runtime_ref, name, _kind}, _library), do: name
+  defp expression({:array, items}, library), do: "[" <> arguments(items, library) <> "]"
 
-  def expression({:binary, op, left, right}) do
-    precedence = Map.fetch!(@precedence, op)
-    "#{operand(left, precedence, :left)} #{op} #{operand(right, precedence, :right)}"
+  defp expression({:object, entries}, library) do
+    pairs =
+      Enum.map_join(entries, ", ", fn {key, value} -> "#{key}: #{expression(value, library)}" end)
+
+    "{" <> pairs <> "}"
   end
 
-  def expression({:unary, op, operand}), do: op <> operand(operand, @unary_precedence, :right)
+  defp expression({:binary, op, left, right}, library) do
+    precedence = Map.fetch!(@precedence, op)
 
-  def expression({:ternary, condition, then_branch, else_branch}),
+    "#{operand(left, precedence, :left, library)} #{op} #{operand(right, precedence, :right, library)}"
+  end
+
+  defp expression({:unary, op, operand}, library),
+    do: op <> operand(operand, @unary_precedence, :right, library)
+
+  defp expression({:ternary, condition, then_branch, else_branch}, library),
     do:
-      "#{operand(condition, @ternary_precedence + 1, :left)} ? #{expression(then_branch)} : #{expression(else_branch)}"
+      "#{operand(condition, @ternary_precedence + 1, :left, library)} ? #{expression(then_branch, library)} : #{expression(else_branch, library)}"
 
-  def expression({:member, object, field}), do: "#{operand(object, 9, :left)}.#{field}"
+  defp expression({:member, object, field}, library),
+    do: "#{operand(object, 9, :left, library)}.#{field}"
 
-  def expression({:index, object, index}),
-    do: "#{operand(object, 9, :left)}[#{expression(index)}]"
+  defp expression({:index, object, index}, library),
+    do: "#{operand(object, 9, :left, library)}[#{expression(index, library)}]"
 
-  def expression({:assign, name, value}), do: "#{name} = #{expression(value)}"
+  defp expression({:assign, name, value}, library), do: "#{name} = #{expression(value, library)}"
 
-  def expression({:component, name, args}),
-    do: "#{name}(#{Enum.map_join(args, ", ", &expression/1)})"
+  defp expression({:component, name, args}, library), do: "#{name}(#{arguments(args, library)})"
 
-  def expression({:call, "Action", args}),
-    do: "Action(#{Enum.map_join(args, ", ", &expression/1)})"
+  defp expression({:call, "Action", args}, library), do: "Action(#{arguments(args, library)})"
 
-  def expression({:call, name, args}), do: "@#{name}(#{Enum.map_join(args, ", ", &expression/1)})"
+  defp expression({:call, name, args}, library), do: "@#{name}(#{arguments(args, library)})"
+
+  defp arguments(asts, library), do: Enum.map_join(asts, ", ", &expression(&1, library))
 
   # Text cut inside a multibyte character cannot be encoded as JSON; its
   # stray bytes become U+FFFD.
@@ -103,8 +113,8 @@ defmodule OpenUI.Serializer do
   # A child binds looser than its parent: on the left, a lower precedence
   # needs parentheses; on the right, an equal one does too, because
   # `a - (b - c)` and `"a" + (1 + 2)` would regroup without them.
-  defp operand(ast, parent_precedence, side) do
-    text = expression(ast)
+  defp operand(ast, parent_precedence, side, library) do
+    text = expression(ast, library)
     precedence = precedence_of(ast)
 
     if precedence < parent_precedence or (side == :right and precedence == parent_precedence),
@@ -117,32 +127,15 @@ defmodule OpenUI.Serializer do
   defp precedence_of({:unary, _op, _operand}), do: @unary_precedence
   defp precedence_of(_ast), do: 10
 
-  defp element_expression(%Element{} = element, library, statements) do
-    case Library.component(library, element.type) do
-      nil ->
-        positional(element.type, Map.values(element.props), [], library, statements)
-
-      component ->
-        positional(
-          element.type,
-          Enum.map(component.props, &element.props[&1.name]),
-          component.props,
-          library,
-          statements
-        )
-    end
-  end
-
-  defp positional(name, values, params, library, statements) do
-    {args, statements} = Enum.map_reduce(values, statements, &value(&1, library, &2))
-    {"#{name}(#{args |> trim_optional_nulls(params) |> Enum.join(", ")})", statements}
+  defp element_expression(%Element{type: type, props: props}, library, statements) do
+    params = Library.component(library, type).props
+    {args, statements} = Enum.map_reduce(params, statements, &value(props[&1.name], library, &2))
+    {"#{type}(#{args |> trim_optional_nulls(params) |> Enum.join(", ")})", statements}
   end
 
   defp trim_optional_nulls(args, params) do
-    required = params |> Enum.take(length(args)) |> Enum.map(& &1.required?)
-
     args
-    |> Enum.zip(required ++ List.duplicate(false, length(args) - length(required)))
+    |> Enum.zip(Enum.map(params, & &1.required?))
     |> Enum.reverse()
     |> Enum.drop_while(fn {arg, required?} -> arg == "null" and not required? end)
     |> Enum.reverse()
@@ -207,18 +200,13 @@ defmodule OpenUI.Serializer do
     do: "@ToAssistant(#{string_literal(message)}, #{context |> value(library, []) |> elem(0)})"
 
   defp step({:open_url, url}, _library), do: "@OpenUrl(#{string_literal(url)})"
-  defp step({:set, name, value}, _library), do: "@Set(#{name}, #{expression(value)})"
+  defp step({:set, name, value}, library), do: "@Set(#{name}, #{expression(value, library)})"
   defp step({:reset, targets}, _library), do: "@Reset(#{Enum.join(targets, ", ")})"
   defp step({:run, statement_id, _kind}, _library), do: "@Run(#{statement_id})"
 
   defp step({:custom, name, params}, library) do
-    keys =
-      case library && Library.action(library, name) do
-        nil -> params |> Map.keys() |> Enum.sort()
-        action -> Enum.map(action.params, & &1.name)
-      end
-
-    args = Enum.map_join(keys, ", ", &(params |> Map.get(&1) |> value(library, []) |> elem(0)))
+    action = Library.action(library, name)
+    args = Enum.map_join(action.params, ", ", &(params[&1.name] |> value(library, []) |> elem(0)))
     "@#{name}(#{args})"
   end
 end

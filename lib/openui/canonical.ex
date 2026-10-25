@@ -97,20 +97,15 @@ defmodule OpenUI.Canonical do
 
   defp step({:open_url, url}, _library, _evaluate), do: action("OpenUrl", [url])
 
-  defp step({:set, target, value}, _library, evaluate),
-    do: action("Set", [target, evaluate.(value)])
+  defp step({:set, target, value}, library, evaluate),
+    do: action("Set", [target, value |> evaluate.() |> summarize(library, evaluate)])
 
   defp step({:reset, targets}, _library, _evaluate), do: action("Reset", targets)
   defp step({:run, statement_id, _kind}, _library, _evaluate), do: action("Run", [statement_id])
 
   defp step({:custom, name, params}, library, evaluate) do
-    keys =
-      case Library.action(library, name) do
-        nil -> params |> Map.keys() |> Enum.sort()
-        action -> Enum.map(action.params, & &1.name)
-      end
-
-    action(name, Enum.map(keys, &summarize(Map.get(params, &1), library, evaluate)))
+    declared = Library.action(library, name)
+    action(name, Enum.map(declared.params, &summarize(params[&1.name], library, evaluate)))
   end
 
   defp action(name, args), do: %{"action" => name, "args" => args}
