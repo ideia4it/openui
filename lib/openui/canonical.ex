@@ -97,8 +97,8 @@ defmodule OpenUI.Canonical do
 
   defp step({:open_url, url}, _library, _evaluate), do: action("OpenUrl", [url])
 
-  defp step({:set, target, value}, _library, evaluate),
-    do: action("Set", [target, evaluate.(value)])
+  defp step({:set, target, value}, library, evaluate),
+    do: action("Set", [target, value |> evaluate.() |> summarize(library, evaluate)])
 
   defp step({:reset, targets}, _library, _evaluate), do: action("Reset", targets)
   defp step({:run, statement_id, _kind}, _library, _evaluate), do: action("Run", [statement_id])
