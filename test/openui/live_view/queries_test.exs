@@ -26,6 +26,49 @@ defmodule OpenUI.LiveView.QueriesTest do
     assert render_async(view) =~ ~s|data-value="2"|
   end
 
+  test "keeps one refresh timer per query after its arguments change" do
+    test_pid = self()
+
+    tools = %{
+      "list" => fn args ->
+        send(test_pid, {:called, self(), args})
+
+        receive do
+          :go -> {:ok, %{"rows" => [args["status"]]}}
+        end
+      end
+    }
+
+    view =
+      mount_program(
+        ~S"""
+        $status = "open"
+        root = Stack([Input("status", "Status", $status), Metric("n", @Count(t.rows))])
+        t = Query("list", {status: $status}, {rows: []}, 0.3)
+        """,
+        tools: tools
+      )
+
+    assert_receive {:called, first, %{"status" => "open"}}
+    send(first, :go)
+    render_async(view)
+
+    view
+    |> element("#program-p form")
+    |> render_change(%{
+      "_target" => ["openui", "0.children.0"],
+      "openui" => %{"0.children.0" => "closed"}
+    })
+
+    assert_receive {:called, second, %{"status" => "closed"}}
+    send(second, :go)
+    render_async(view)
+
+    assert_receive {:called, refreshed, %{"status" => "closed"}}, 1_000
+    send(refreshed, :go)
+    refute_receive {:called, _task, _args}, 200
+  end
+
   test "keeps the newest result when an older one arrives late" do
     test_pid = self()
 

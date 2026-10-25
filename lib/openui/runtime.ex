@@ -12,7 +12,8 @@ defmodule OpenUI.Runtime do
       `query_result/4`;
     * `{:run_mutation, run_ref, tool, args}`: call the tool, then
       `mutation_result/3`;
-    * `{:schedule_refresh, query_id, seconds}`: call `refresh/2` later.
+    * `{:schedule_refresh, query_id, seconds}`: call `refresh/2` later. A new one for
+      the same query replaces the pending one: keep one timer per query.
 
   Which components are fields and which give a form name to their subtree is
   up to each platform (prompt.md, section 2.6), so the runtime takes it as

@@ -52,7 +52,7 @@ defmodule OpenUI.MixProject do
         "GitHub" => @source_url,
         "OpenUI spec" => "https://github.com/thesysdev/openui/tree/main/spec"
       },
-      files: ~w(lib mix.exs README.md CHANGELOG.md LICENSE NOTICE)
+      files: ~w(lib mix.exs .formatter.exs README.md CHANGELOG.md LICENSE NOTICE)
     ]
   end
 
@@ -60,7 +60,46 @@ defmodule OpenUI.MixProject do
     [
       main: "readme",
       source_ref: "v#{@version}",
-      extras: ["README.md", "CHANGELOG.md"]
+      extras: [
+        "README.md",
+        "guides/getting-started.md",
+        "guides/defining-a-catalog.md",
+        "guides/liveview.md",
+        "guides/req-llm.md",
+        "guides/jido-ai.md",
+        "guides/react-app.md",
+        "guides/errors-and-safeguards.md",
+        "guides/stored-programs.md",
+        "CHANGELOG.md"
+      ],
+      groups_for_extras: [Guides: ~r{guides/}],
+      groups_for_modules: [
+        Catalog: [
+          OpenUI.Library,
+          OpenUI.Library.DSL,
+          OpenUI.Library.Compat,
+          ~r/OpenUI\.Library\./
+        ],
+        Language: [OpenUI.Parser, OpenUI.Stream, OpenUI.Edit, OpenUI.Serializer, OpenUI.Canonical],
+        Runtime: [OpenUI.Runtime, ~r/OpenUI\.Runtime\./],
+        LiveView: [OpenUI.LiveView, OpenUI.LiveView.Components],
+        Prompt: [OpenUI.Prompt, OpenUI.Message],
+        Data: [
+          OpenUI.Program,
+          OpenUI.Program.Query,
+          OpenUI.Program.Mutation,
+          OpenUI.Statement,
+          OpenUI.Element,
+          OpenUI.Unknown,
+          OpenUI.ActionPlan,
+          OpenUI.Binding,
+          OpenUI.Error,
+          OpenUI.Event,
+          OpenUI.JSON,
+          OpenUI.JSON.Object,
+          OpenUI.Builtins
+        ]
+      ]
     ]
   end
 

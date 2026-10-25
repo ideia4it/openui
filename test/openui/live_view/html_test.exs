@@ -46,6 +46,21 @@ defmodule OpenUI.LiveView.HTMLTest do
              ["action"]
   end
 
+  test "leaves out data that lands where components go, as the official renderer does" do
+    runtime =
+      runtime(~S"""
+      root = Stack([Text("Tickets"), t, t.note, Card(t.title, [t, Text("Open")])])
+      t = Query("list", {}, {title: "Waiting", note: "Two waiting", rows: []})
+      """)
+
+    {safe, []} = HTML.render(runtime, ExampleUI, target: 1, dom_id: "p")
+    doc = LazyHTML.from_fragment(html(safe))
+
+    assert doc |> LazyHTML.query("p.text") |> Enum.count() == 2
+    assert doc |> LazyHTML.query("section.card h2") |> LazyHTML.text() == "Waiting"
+    assert doc |> LazyHTML.query("div.stack") |> LazyHTML.text() =~ "Two waiting"
+  end
+
   test "drops a host component that raises, reports it and logs the stacktrace" do
     runtime = runtime(~s|root = Stack([Text("ok"), boom])\nboom = Highlight(Card("x"))|)
 

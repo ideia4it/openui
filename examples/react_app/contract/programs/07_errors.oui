@@ -1,0 +1,1 @@
+root = Stack([Card("Fine", [Text("ok")]), Pie(1), Metric("No value"), Text("a", "body", "extra"), Text(@Shout("x")), Stack("not a list")])

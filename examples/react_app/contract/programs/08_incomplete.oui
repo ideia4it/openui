@@ -1,0 +1,3 @@
+root = Stack([title, chart])
+title = Text("Weekly", "heading")
+chart = LineChart(["Mon", "Tue"], [Series("Open", [1,

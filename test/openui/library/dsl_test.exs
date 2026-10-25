@@ -41,6 +41,16 @@ defmodule OpenUI.Library.DSLTest do
     end
   end
 
+  test "ships its formatter rules so a host's import_deps keeps the DSL without parens" do
+    files = Mix.Project.config()[:package][:files]
+    {formatter, _binding} = Code.eval_file(".formatter.exs")
+
+    assert ".formatter.exs" in files
+
+    assert Enum.sort(formatter[:export][:locals_without_parens]) ==
+             Enum.sort(action: 2, component: 2, function: 2, group: 2, group: 3)
+  end
+
   test "accepts a required prop with a default after optional ones" do
     assert [{BackCompat, _}] =
              Code.compile_string(~S"""
