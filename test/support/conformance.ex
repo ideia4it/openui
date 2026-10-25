@@ -1,6 +1,8 @@
 defmodule OpenUI.Conformance do
   @moduledoc false
 
+  alias OpenUI.Runtime.Validation
+
   @root Path.expand("../fixtures/openui-spec", __DIR__)
 
   def root, do: @root
@@ -30,6 +32,15 @@ defmodule OpenUI.Conformance do
 
   @doc "Runs one case; returns the list of differences, empty when it passes."
   def run(id), do: id |> files() |> run_case(id)
+
+  defp run_case(%{"validation.json" => validation}, _id) do
+    for {%{"rules" => rules, "value" => value, "valid" => valid?}, index} <-
+          validation |> JSON.decode!() |> Map.fetch!("cases") |> Enum.with_index(),
+        result = Validation.validate(value, rules),
+        result == :ok != valid? do
+      "case #{index} #{inspect(rules)} #{inspect(value)}: got #{inspect(result)}"
+    end
+  end
 
   defp run_case(%{"chunks.json" => chunks} = files, _id) do
     expected = JSON.decode!(files["expected.json"])
