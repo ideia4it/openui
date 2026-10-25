@@ -23,6 +23,8 @@ defmodule OpenUI.LiveView.HTMLTest do
 
   defp html(safe), do: Phoenix.HTML.safe_to_string(safe)
 
+  defp cells(column), do: column |> LazyHTML.query("span.cell") |> Enum.map(&LazyHTML.text/1)
+
   test "renders nested host components, bindings and action attributes" do
     runtime =
       runtime(~S"""
@@ -59,6 +61,19 @@ defmodule OpenUI.LiveView.HTMLTest do
     assert doc |> LazyHTML.query("p.text") |> Enum.count() == 2
     assert doc |> LazyHTML.query("section.card h2") |> LazyHTML.text() == "Waiting"
     assert doc |> LazyHTML.query("div.stack") |> LazyHTML.text() =~ "Two waiting"
+  end
+
+  test "keeps an empty cell of a column in its row" do
+    runtime =
+      runtime(~S"""
+      root = Stack([Table([Col("Ticket", t.rows.title), Col("Due", t.rows.due)])])
+      t = Query("list", {}, {rows: [{title: "A", due: "Mon"}, {title: "B", due: null}, {title: "C", due: "Wed"}]})
+      """)
+
+    {safe, []} = HTML.render(runtime, ExampleUI, target: 1, dom_id: "p")
+    columns = safe |> html() |> LazyHTML.from_fragment() |> LazyHTML.query("th")
+
+    assert Enum.map(columns, &cells/1) == [["A", "B", "C"], ["Mon", "", "Wed"]]
   end
 
   test "drops a host component that raises, reports it and logs the stacktrace" do

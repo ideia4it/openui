@@ -29,7 +29,12 @@ defmodule OpenUI.Test.ExampleUI do
 
   def series(assigns), do: ~H|<span class="series">{@name}</span>|
   def table(assigns), do: ~H|<table><tr>{@columns}</tr></table>|
-  def col(assigns), do: ~H|<th>{@label}</th>|
+
+  def col(assigns) do
+    ~H"""
+    <th>{@label}<span :for={cell <- @data || []} class="cell">{cell}</span></th>
+    """
+  end
 
   def button(assigns) do
     ~H"""
