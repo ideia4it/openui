@@ -38,6 +38,35 @@ defmodule OpenUI.Library do
   @builtin_action_refs ~w(ActionExpression OpenUrl ToAssistant)
 
   @doc """
+  Defines a library in a module:
+
+      defmodule MyApp.Library do
+        use OpenUI.Library, id: "myapp", version: "1.0.0", root: "Stack"
+
+        component "Stack",
+          description: "Lays out children in a column",
+          props: [children: [type: {:array, :component}, required: true]]
+
+        function "Percent",
+          description: "Part over total as a percentage",
+          params: [part: [type: :number, required: true], total: [type: :number, required: true]],
+          returns: :string,
+          impl: &MyApp.Formulas.percent/1
+
+        action "CopyToClipboard", description: "Copies text", params: [text: [type: :string, required: true]]
+
+        group "Layout", ["Stack"], notes: ["Wrap every page in a Stack."]
+      end
+
+  See `OpenUI.Library.DSL` for the macros and the prop types.
+  """
+  defmacro __using__(opts) do
+    quote do
+      use OpenUI.Library.DSL, unquote(opts)
+    end
+  end
+
+  @doc """
   Reads a LibrarySpec, given as JSON text or as a decoded `OpenUI.JSON.Object`.
 
   Custom functions have no implementation in the spec; pass them as

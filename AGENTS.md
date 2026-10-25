@@ -36,7 +36,7 @@ Update the fixtures only to a new pinned commit: `scripts/sync-fixtures.sh <sha>
 
 - Zero runtime dependencies. `phoenix_live_view` is optional; code that needs it lives only in `lib/openui/live_view*` and compiles only when it is loaded.
 - Nothing a model generates may raise to the host. Public functions that take model text or values return a result; they never raise.
-- Comments explain why, never what. Never use the em dash character in our text. The U+2014 separator the prompt requires is written as the escape `—`.
+- Comments explain why, never what. Never use the em dash character in our text. The U+2014 separator the prompt requires is written as the escape `\u2014`.
 - Moduledocs, guides, README and comments in English. Test names in English, BDD style. Commits are conventional, in English.
 - JavaScript tooling runs with `bun`, never `npm`.
 - Publishing to Hex happens only on an explicit order from the maintainer.
