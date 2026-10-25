@@ -10,3 +10,4 @@ First release. Implements OpenUI Lang 1.0 (spec commit `9d73d17`).
 - Runtime for state, forms, validation, actions, `Query` and `Mutation`, as a pure value with effects.
 - Stored message protocol (`OpenUI.Message`).
 - Optional Phoenix LiveView renderer with per-component crash protection.
+- Eight guides, a LiveView chat example and a React example whose contract test compares this library with the official parser.

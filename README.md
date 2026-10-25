@@ -66,6 +66,11 @@ In LiveView:
 - [Errors and safeguards](guides/errors-and-safeguards.md)
 - [Stored programs](guides/stored-programs.md)
 
+## Examples
+
+- [LiveView chat](https://github.com/ideia4it/openui/tree/main/examples/liveview_chat): a support assistant with ReqLLM or a Jido.AI agent, one `elixir` command each.
+- [React app on a Phoenix backend](https://github.com/ideia4it/openui/tree/main/examples/react_app): the official React renderer drawing the same catalog, with a contract test that runs the official parser and this library over the same programs in CI.
+
 ## License
 
 MIT, Copyright (c) 2026 Ideia4IT. The conformance fixtures and the fixed text of the prompt come from [OpenUI](https://github.com/thesysdev/openui), MIT, Copyright (c) 2011-2024 Thesys Inc.; see `NOTICE`.
