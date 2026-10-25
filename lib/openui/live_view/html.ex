@@ -109,7 +109,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp prop_assign(_element, _prop, %Binding{name: name}, ctx, errors),
       do: {ctx.runtime |> Runtime.state() |> Map.get(name) |> unwrap(), errors}
 
+    defp prop_assign(_element, %{kind: :components}, value, ctx, errors),
+      do: render_slot(value, ctx, errors)
+
     defp prop_assign(_element, _prop, value, ctx, errors), do: render_value(value, ctx, errors)
+
+    # Data that reaches a component slot at runtime, such as a query result in a
+    # children list, is left out as the official renderer does; text still shows.
+    defp render_slot(list, ctx, errors) when is_list(list) do
+      {items, errors} = Enum.map_reduce(list, errors, &render_slot(&1, ctx, &2))
+      {Enum.reject(items, &is_nil/1), errors}
+    end
+
+    defp render_slot(value, _ctx, errors) when is_map(value) and not is_struct(value),
+      do: {nil, errors}
+
+    defp render_slot(value, ctx, errors), do: render_value(value, ctx, errors)
 
     defp action_attributes(key, prop, ctx) do
       [{"type", "button"}, {"phx-click", "openui:action"}] ++

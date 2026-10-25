@@ -62,7 +62,7 @@ The renderer wraps the program in a `<form>`. Render a form component as a `<fie
 
 Each function receives:
 
-- **Every catalog prop by its name**, as a plain value. A prop that takes components arrives as rendered HTML (a list of it for a list prop): render it with `{@children}`. A bound prop arrives with its current value.
+- **Every catalog prop by its name**, as a plain value. A prop that takes components arrives as rendered HTML (a list of it for a list prop): render it with `{@children}`. Data that lands there at runtime, such as a query result written in a children list, is left out; text and numbers show as text. A bound prop arrives with its current value.
 - **Action props as button attributes**: `<button {@action || []}>`. The attribute list is `nil` when the model gave no action. You never deal with `phx-click` or `phx-target`.
 - **`@bind`** for field components: `id`, `name` and `value` for the input, `<input {@bind} />`. Typing updates the bound `$variable` or the form field.
 - **`@error`** for field components: the validation rule the field failed at the last submit (`"required"`, `"email"`, `"minLength"`...), or `nil`. Write the message in your own language.
