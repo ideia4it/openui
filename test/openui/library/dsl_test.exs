@@ -131,6 +131,29 @@ defmodule OpenUI.Library.DSLTest do
            }
   end
 
+  test "accepts a function without a return type, as the official library does" do
+    [{greetings, _binary}] =
+      Code.compile_string(~S"""
+      defmodule Greetings do
+        use OpenUI.Library, root: "Text"
+
+        component "Text", description: "A run of text", props: [text: [type: :string, required: true]]
+
+        function "Greet",
+          description: "Says hello",
+          params: [name: [type: :string, required: true]],
+          impl: &__MODULE__.greet/1
+
+        def greet(%{"name" => name}), do: "Hello, " <> name
+      end
+      """)
+
+    spec = greetings |> OpenUI.Library.to_spec() |> OpenUI.JSON.to_plain()
+
+    assert spec["functions"]["Greet"]["signature"] == "Greet(name: string)"
+    refute Map.has_key?(spec["schema"]["functions"]["Greet"], "returns")
+  end
+
   test "ships its formatter rules so a host's import_deps keeps the DSL without parens" do
     files = Mix.Project.config()[:package][:files]
     {formatter, _binding} = Code.eval_file(".formatter.exs")

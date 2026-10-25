@@ -114,7 +114,12 @@ defmodule OpenUI.Library.Schema do
       ]
 
       returns = Keyword.get(opts, :returns)
-      pairs = if returns?, do: pairs ++ [{"returns", type_schema(returns, names)}], else: pairs
+
+      pairs =
+        if returns? and returns != nil,
+          do: pairs ++ [{"returns", type_schema(returns, names)}],
+          else: pairs
+
       {name, JSON.object(pairs)}
     end)
     |> JSON.object()
