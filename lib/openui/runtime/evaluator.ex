@@ -68,8 +68,6 @@ defmodule OpenUI.Runtime.Evaluator do
     {%{element | props: props}, errors}
   end
 
-  defp bindable?(nil, _name), do: false
-
   defp bindable?(component, name),
     do: Enum.any?(component.props, &(&1.name == name and &1.bindable?))
 
@@ -213,10 +211,8 @@ defmodule OpenUI.Runtime.Evaluator do
   defp member_of_item(item, field) when is_map(item) and not is_struct(item),
     do: Map.get(item, field)
 
-  # Arrays are objects in JavaScript: an inner array answers "length" and its
-  # numeric keys, so m.0 plucks the first item of every row.
-  defp member_of_item(list, "length") when is_list(list), do: length(list)
-
+  # Arrays are objects in JavaScript: an inner array answers its numeric keys,
+  # so m.0 plucks the first item of every row.
   defp member_of_item(list, field) when is_list(list) do
     case Integer.parse(field) do
       {position, ""} when position >= 0 -> Enum.at(list, position)
@@ -290,9 +286,6 @@ defmodule OpenUI.Runtime.Evaluator do
 
       action = Library.action(env.ctx.library, name) ->
         custom_action(action, args, env, errors)
-
-      true ->
-        {nil, errors}
     end
   end
 

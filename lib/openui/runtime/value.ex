@@ -121,7 +121,6 @@ defmodule OpenUI.Runtime.Value do
   def binary_op("<", left, right), do: to_number(left) < to_number(right)
   def binary_op(">=", left, right), do: to_number(left) >= to_number(right)
   def binary_op("<=", left, right), do: to_number(left) <= to_number(right)
-  def binary_op(_unknown, _left, _right), do: nil
 
   @doc "Applies `!` or unary `-`."
   @spec unary_op(String.t(), term()) :: term()

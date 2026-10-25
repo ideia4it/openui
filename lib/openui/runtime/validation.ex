@@ -28,8 +28,6 @@ defmodule OpenUI.Runtime.Validation do
     end)
   end
 
-  def validate(_value, _rules), do: :ok
-
   defp empty?(value), do: value in [nil, "", []] or value == %{}
 
   defp passes?("required", value, _argument), do: not empty?(value)
