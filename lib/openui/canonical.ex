@@ -21,20 +21,7 @@ defmodule OpenUI.Canonical do
   @spec result(Program.t(), Library.t() | module()) :: map()
   def result(%Program{} = program, library) do
     library = Library.resolve(library)
-    defaults_ctx = %Context{library: library}
-
-    state =
-      Map.new(program.state, fn {name, default} ->
-        {name, Evaluator.evaluate(default, defaults_ctx)}
-      end)
-
-    ctx = %Context{
-      library: library,
-      state: state,
-      queries: Map.new(program.queries, &{&1.id, Evaluator.evaluate(&1.defaults, defaults_ctx)}),
-      mutations: Map.new(program.mutations, &{&1.id, @idle_mutation})
-    }
-
+    ctx = stream_end_context(program, library)
     {tree, runtime_errors} = Evaluator.evaluate_root(program, ctx)
     errors = program.errors ++ runtime_errors
 
@@ -45,7 +32,29 @@ defmodule OpenUI.Canonical do
       "unresolved" => program.unresolved,
       "orphans" => program.orphans,
       "incomplete" => program.incomplete,
-      "state" => state
+      "state" => ctx.state
+    }
+  end
+
+  @doc "The evaluated tree at stream end, as `result/2` summarizes it."
+  @spec tree(Program.t(), Library.t() | module()) :: Element.t() | nil
+  def tree(%Program{} = program, library) do
+    library = Library.resolve(library)
+    {tree, _errors} = Evaluator.evaluate_root(program, stream_end_context(program, library))
+    tree
+  end
+
+  defp stream_end_context(program, library) do
+    defaults_ctx = %Context{library: library}
+
+    %Context{
+      library: library,
+      state:
+        Map.new(program.state, fn {name, default} ->
+          {name, Evaluator.evaluate(default, defaults_ctx)}
+        end),
+      queries: Map.new(program.queries, &{&1.id, Evaluator.evaluate(&1.defaults, defaults_ctx)}),
+      mutations: Map.new(program.mutations, &{&1.id, @idle_mutation})
     }
   end
 
