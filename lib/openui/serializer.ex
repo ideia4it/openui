@@ -56,7 +56,7 @@ defmodule OpenUI.Serializer do
 
   @doc "Serializes an expression, adding the parentheses its grouping needs."
   @spec expression(OpenUI.Parser.Expression.ast()) :: String.t()
-  def expression({:string, string}), do: JSON.encode!(string)
+  def expression({:string, string}), do: string_literal(string)
   def expression({:number, number}), do: Value.stringify(number)
   def expression({:boolean, boolean}), do: to_string(boolean)
   def expression(:null), do: "null"
@@ -95,6 +95,10 @@ defmodule OpenUI.Serializer do
     do: "Action(#{Enum.map_join(args, ", ", &expression/1)})"
 
   def expression({:call, name, args}), do: "@#{name}(#{Enum.map_join(args, ", ", &expression/1)})"
+
+  # Text cut inside a multibyte character cannot be encoded as JSON; its
+  # stray bytes become U+FFFD.
+  defp string_literal(string), do: string |> String.replace_invalid() |> JSON.encode!()
 
   # A child binds looser than its parent: on the left, a lower precedence
   # needs parentheses; on the right, an equal one does too, because
@@ -148,7 +152,7 @@ defmodule OpenUI.Serializer do
   defp value(nil, _library, statements), do: {"null", statements}
 
   defp value(string, _library, statements) when is_binary(string),
-    do: {JSON.encode!(string), statements}
+    do: {string_literal(string), statements}
 
   defp value(number, _library, statements) when is_number(number),
     do: {Value.stringify(number), statements}
@@ -196,12 +200,13 @@ defmodule OpenUI.Serializer do
   defp plan(%ActionPlan{steps: steps}, library),
     do: "Action([" <> Enum.map_join(steps, ", ", &step(&1, library)) <> "])"
 
-  defp step({:to_assistant, message, nil}, _library), do: "@ToAssistant(#{JSON.encode!(message)})"
+  defp step({:to_assistant, message, nil}, _library),
+    do: "@ToAssistant(#{string_literal(message)})"
 
   defp step({:to_assistant, message, context}, library),
-    do: "@ToAssistant(#{JSON.encode!(message)}, #{context |> value(library, []) |> elem(0)})"
+    do: "@ToAssistant(#{string_literal(message)}, #{context |> value(library, []) |> elem(0)})"
 
-  defp step({:open_url, url}, _library), do: "@OpenUrl(#{JSON.encode!(url)})"
+  defp step({:open_url, url}, _library), do: "@OpenUrl(#{string_literal(url)})"
   defp step({:set, name, value}, _library), do: "@Set(#{name}, #{expression(value)})"
   defp step({:reset, targets}, _library), do: "@Reset(#{Enum.join(targets, ", ")})"
   defp step({:run, statement_id, _kind}, _library), do: "@Run(#{statement_id})"

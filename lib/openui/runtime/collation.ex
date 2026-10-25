@@ -16,7 +16,7 @@ defmodule OpenUI.Runtime.Collation do
   end
 
   defp sort_key(string) do
-    decomposed = :unicode.characters_to_nfd_binary(string)
+    decomposed = decompose(string)
     base = String.replace(decomposed, ~r/\p{Mn}/u, "")
     accents = Regex.scan(~r/\p{Mn}/u, decomposed) |> List.flatten()
 
@@ -24,6 +24,15 @@ defmodule OpenUI.Runtime.Collation do
       for char <- String.graphemes(base), do: if(String.downcase(char) == char, do: 0, else: 1)
 
     [String.downcase(base), accents, case_marks, string]
+  end
+
+  # Text cut inside a multibyte character is not valid UTF-8; its valid part
+  # decomposes and the stray bytes are dropped from the sort key.
+  defp decompose(string) do
+    case :unicode.characters_to_nfd_binary(string) do
+      decomposed when is_binary(decomposed) -> decomposed
+      {_error_or_incomplete, valid, _rest} -> valid
+    end
   end
 
   defp compare_keys(left, right) when left < right, do: :lt
