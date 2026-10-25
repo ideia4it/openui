@@ -41,6 +41,47 @@ defmodule OpenUI.Library.DSLTest do
     end
   end
 
+  test "writes lists of unions and slots for a single action as the official library does" do
+    [{board, _binary}] =
+      Code.compile_string(~S"""
+      defmodule Board do
+        use OpenUI.Library, root: "Board"
+
+        component "Board",
+          description: "Cards and metrics",
+          props: [
+            items: [type: {:array, {:one_of, [{:ref, "Card"}, {:ref, "Metric"}]}}, required: true],
+            shares: [type: {:array, {:actions, ["CopyToClipboard", "OpenUrl"]}}],
+            links: [type: {:array, {:actions, ["OpenUrl"]}}],
+            ask: [type: {:actions, ["ToAssistant"]}]
+          ]
+
+        component "Card", description: "A titled container", props: [title: [type: :string, required: true]]
+        component "Metric", description: "A number", props: [value: [type: :number, required: true]]
+        action "CopyToClipboard", description: "Copies text", params: [text: [type: :string, required: true]]
+      end
+      """)
+
+    spec = board |> OpenUI.Library.to_spec() |> OpenUI.JSON.to_plain()
+    board_props = spec["schema"]["$defs"]["Board"]["properties"]
+
+    assert spec["components"]["Board"]["signature"] ==
+             "Board(items: (Card | Metric)[], shares?: (@CopyToClipboard | @OpenUrl)[], links?: @OpenUrl[], ask?: @ToAssistant)"
+
+    assert board_props["links"]["items"] == %{"$ref" => "#/$defs/OpenUrl"}
+    assert board_props["ask"] == %{"$ref" => "#/$defs/ToAssistant"}
+
+    assert spec["schema"]["$defs"]["ToAssistant"] == %{
+             "type" => "object",
+             "properties" => %{
+               "type" => %{"type" => "string", "const" => "continue_conversation"},
+               "context" => %{"type" => "string"}
+             },
+             "required" => ["type"],
+             "additionalProperties" => false
+           }
+  end
+
   test "ships its formatter rules so a host's import_deps keeps the DSL without parens" do
     files = Mix.Project.config()[:package][:files]
     {formatter, _binding} = Code.eval_file(".formatter.exs")
