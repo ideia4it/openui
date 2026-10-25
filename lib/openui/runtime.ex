@@ -380,13 +380,26 @@ defmodule OpenUI.Runtime do
     end
   end
 
+  @doc """
+  The current value of a field element: its bound `$variable`, or its entry
+  in the form or page state.
+  """
+  @spec field_value(t(), String.t()) :: term()
+  def field_value(%__MODULE__{} = runtime, key) do
+    case Map.fetch(runtime.elements, key) do
+      {:ok, element} -> field_value(runtime, key, element)
+      :error -> nil
+    end
+  end
+
   defp field_value(runtime, key, element) do
     case bound_state(element) do
       %Binding{name: name} ->
         runtime.store |> Map.get(name) |> unwrap()
 
       nil ->
-        name = element.props[Keyword.fetch!(runtime.fields[element.type], :name)]
+        name =
+          element.props[runtime.fields |> Map.get(element.type, []) |> Keyword.get(:name, "name")]
 
         fields =
           if form = form_name(runtime, key), do: form_fields(runtime, form), else: runtime.store
