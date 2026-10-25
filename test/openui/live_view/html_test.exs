@@ -63,6 +63,19 @@ defmodule OpenUI.LiveView.HTMLTest do
     assert doc |> LazyHTML.query("div.stack") |> LazyHTML.text() =~ "Two waiting"
   end
 
+  test "gives a bound prop the plain value of its variable, even when a field named after it wrote it" do
+    runtime =
+      runtime(~S"""
+      root = Stack([Input("$plan", "Plan"), Select("plan", [SelectItem("pro", "Pro")], $plan)])
+      """)
+
+    {runtime, _effects} = OpenUI.Runtime.input(runtime, "0.children.0", "pro")
+    {safe, []} = HTML.render(runtime, ExampleUI, target: 1, dom_id: "p")
+    doc = LazyHTML.from_fragment(html(safe))
+
+    assert doc |> LazyHTML.query("select") |> LazyHTML.attribute("data-bound") == ["pro"]
+  end
+
   test "keeps an empty cell of a column in its row" do
     runtime =
       runtime(~S"""

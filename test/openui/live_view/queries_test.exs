@@ -1,6 +1,8 @@
 defmodule OpenUI.LiveView.QueriesTest do
   use OpenUI.LiveCase, async: true
 
+  @row_count_program ~s|root = Stack([Metric("n", @Count(t.rows))])\nt = Query("list", {}, {rows: []})|
+
   test "runs queries after the stream ends and shows loading until the data arrives" do
     test_pid = self()
 
@@ -129,6 +131,112 @@ defmodule OpenUI.LiveView.QueriesTest do
     render_async(view)
     assert_receive {:openui, "p", {:errors, [%OpenUI.Error{code: "tool-error", source: :query}]}}
     assert render(view) =~ ~s|data-value="0"|
+  end
+
+  test "a tool that returns an error becomes a query error with its reason" do
+    view =
+      mount_program(@row_count_program,
+        tools: %{"list" => fn _args -> {:error, "database down"} end}
+      )
+
+    render_async(view)
+
+    assert_receive {:openui, "p",
+                    {:errors,
+                     [
+                       %OpenUI.Error{
+                         code: "tool-error",
+                         message: ~s(Tool "list" failed: database down)
+                       }
+                     ]}}
+
+    assert render(view) =~ ~s|data-value="0"|
+  end
+
+  @tag :capture_log
+  test "a tool that exits becomes a query error and the page stays up" do
+    view = mount_program(@row_count_program, tools: %{"list" => fn _args -> exit(:timeout) end})
+
+    render_async(view)
+
+    assert_receive {:openui, "p",
+                    {:errors,
+                     [
+                       %OpenUI.Error{
+                         code: "tool-error",
+                         message: ~s(Tool "list" failed: {:exit, :timeout})
+                       }
+                     ]}}
+
+    assert render(view) =~ ~s|data-value="0"|
+  end
+
+  test "a tool that answers with bare data counts as a success" do
+    view =
+      mount_program(@row_count_program,
+        tools: %{"list" => fn _args -> %{"rows" => [1, 2, 3]} end}
+      )
+
+    assert render_async(view) =~ ~s|data-value="3"|
+    refute_receive {:openui, "p", {:errors, _errors}}
+  end
+
+  test "a query whose tool the provider lacks reports the tools it has" do
+    tools = %{"tickets" => fn _args -> {:ok, %{}} end, "agents" => fn _args -> {:ok, %{}} end}
+    view = mount_program(@row_count_program, tools: tools)
+
+    render_async(view)
+
+    assert_receive {:openui, "p",
+                    {:errors,
+                     [
+                       %OpenUI.Error{
+                         code: "tool-not-found",
+                         hint: "Available tools: agents, tickets"
+                       }
+                     ]}}
+  end
+
+  test "a query on a page without a tool provider reports that no tool is available" do
+    view = mount_program(@row_count_program)
+
+    render_async(view)
+
+    assert_receive {:openui, "p",
+                    {:errors,
+                     [%OpenUI.Error{code: "tool-not-found", hint: "No tools are available"}]}}
+  end
+
+  test "a new program stops the refreshes of the program it replaces" do
+    test_pid = self()
+
+    tools = %{
+      "list" => fn _args ->
+        send(test_pid, {:called, self()})
+
+        receive do
+          :go -> {:ok, %{"rows" => [1]}}
+        end
+      end
+    }
+
+    view =
+      mount_program(
+        ~s|root = Stack([Metric("n", @Count(t.rows))])\nt = Query("list", {}, {rows: []}, 0.3)|,
+        tools: tools
+      )
+
+    assert_receive {:called, first}
+    send(first, :go)
+    render_async(view)
+
+    send(view.pid, {:set_response, @row_count_program, false})
+
+    assert_receive {:called, replacement}
+    send(replacement, :go)
+    render_async(view)
+
+    refute_receive {:called, _task}, 500
   end
 
   test "runs a mutation from a button and continues the plan on success" do

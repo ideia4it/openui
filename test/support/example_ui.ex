@@ -53,7 +53,7 @@ defmodule OpenUI.Test.ExampleUI do
 
   def select(assigns) do
     ~H"""
-    <select {@bind || []}>{@items}</select>
+    <select data-bound={@value} {@bind || []}>{@items}</select>
     """
   end
 
