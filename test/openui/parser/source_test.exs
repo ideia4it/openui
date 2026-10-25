@@ -12,6 +12,17 @@ defmodule OpenUI.Parser.SourceTest do
              ["root = Stack([a, b])", ~S|a = Text("use ``` here")|, ~S|b = Text("B")|]
   end
 
+  test "keeps a fence open past an escaped quote inside a string" do
+    response = ~S'''
+    Here it is:
+    ```
+    root = Stack([Text("say \"```\" here")])
+    ```
+    '''
+
+    assert Source.prepare(response) == ~S|root = Stack([Text("say \"```\" here")])|
+  end
+
   test "strips comments outside strings, multi-line strings included" do
     prepared = Source.prepare(fixture("grammar/004-comment-strip"))
     refute prepared =~ "the page"
