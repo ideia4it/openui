@@ -62,13 +62,8 @@ defmodule OpenUI.Parser.Validator do
 
   @doc false
   def signature_hint(library, owner) do
-    case params_of(library, owner) do
-      nil ->
-        nil
-
-      params ->
-        "Signature: #{owner}(#{Enum.map_join(params, ", ", &starred/1)}). * marks required"
-    end
+    params = params_of(library, owner)
+    "Signature: #{owner}(#{Enum.map_join(params, ", ", &starred/1)}). * marks required"
   end
 
   defp starred(%{required?: true, name: name}), do: name <> "*"
@@ -252,7 +247,6 @@ defmodule OpenUI.Parser.Validator do
            Library.action(library, owner) do
       %{props: props} -> props
       %{params: params} -> params
-      nil -> nil
     end
   end
 

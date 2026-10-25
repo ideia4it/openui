@@ -100,7 +100,6 @@ defmodule OpenUI.Parser.Lexer do
        when kind in [:number, :string, :ident, :state, :at, :literal],
        do: true
 
-  defp after_value?([{:string, _value, :unterminated} | _rest]), do: true
   defp after_value?([{:op, closer} | _rest]) when closer in [")", "]"], do: true
   defp after_value?(_tokens), do: false
 
@@ -202,9 +201,6 @@ defmodule OpenUI.Parser.Lexer do
     case source do
       <<_::binary-size(offset), ?\\, _escaped, _::binary>> ->
         double_quoted_size(source, offset + 2)
-
-      <<_::binary-size(offset), ?\\>> ->
-        {offset + 1, false}
 
       <<_::binary-size(offset), ?", _::binary>> ->
         {offset + 1, true}
