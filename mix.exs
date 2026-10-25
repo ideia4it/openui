@@ -19,7 +19,8 @@ defmodule OpenUI.MixProject do
       source_url: @source_url,
       package: package(),
       docs: docs(),
-      dialyzer: [plt_add_apps: [:mix], plt_local_path: "priv/plts", plt_core_path: "priv/plts"]
+      dialyzer: [plt_add_apps: [:mix], plt_local_path: "priv/plts", plt_core_path: "priv/plts"],
+      test_coverage: test_coverage()
     ]
   end
 
@@ -40,7 +41,7 @@ defmodule OpenUI.MixProject do
         "compile --warnings-as-errors",
         "format --check-formatted",
         "credo --strict",
-        "test"
+        "test --cover"
       ]
     ]
   end
@@ -100,6 +101,16 @@ defmodule OpenUI.MixProject do
           OpenUI.Builtins
         ]
       ]
+    ]
+  end
+
+  # Every line of lib/ runs in a test except __components__/0, which
+  # `use Phoenix.LiveComponent` generates in OpenUI.LiveView.Program and Phoenix
+  # only calls at compile time; cover ignores whole modules, not single lines.
+  defp test_coverage do
+    [
+      summary: [threshold: 99.95],
+      ignore_modules: [OpenUI.Conformance, OpenUI.LiveCase, ~r/OpenUI\.Test\./]
     ]
   end
 
