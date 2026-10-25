@@ -221,4 +221,18 @@ defmodule OpenUI.RuntimeTest do
     assert inspect(runtime) ==
              ~s|#OpenUI.Runtime<store: %{"$tab" => "a"}, finished?: true, field_errors: %{}, ...>|
   end
+
+  test "evaluates calls nested in a $variable default, so the host gets plain state" do
+    runtime =
+      start(~S"""
+      $picked = [@Count([1, 2])]
+      $summary = {n: @Count([1])}
+      root = Stack([Text("" + $picked)])
+      """)
+
+    state = OpenUI.Runtime.state(runtime)
+    assert state["$picked"] == [2]
+    assert state["$summary"] == %{"n" => 1}
+    assert JSON.decode!(JSON.encode!(state)) == state
+  end
 end

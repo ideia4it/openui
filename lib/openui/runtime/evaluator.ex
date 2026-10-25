@@ -177,6 +177,13 @@ defmodule OpenUI.Runtime.Evaluator do
 
   defp interpret(%Element{} = value, env, errors), do: element(value, env, errors)
 
+  # A materialized value, such as a $variable default, keeps the calls inside
+  # its lists and objects; it evaluates like the literal it came from.
+  defp interpret(list, env, errors) when is_list(list), do: interpret({:array, list}, env, errors)
+
+  defp interpret(map, env, errors) when is_map(map) and not is_struct(map),
+    do: interpret({:object, Map.to_list(map)}, env, errors)
+
   defp interpret(value, _env, errors), do: {value, errors}
 
   # A reference left after lowering is a loop variable, or the array of an
