@@ -16,6 +16,11 @@ defmodule OpenUI.Runtime.QueriesTest do
   defp key_of(runtime, statement_id),
     do: OpenUI.Conformance.key_of(OpenUI.Runtime.tree(runtime), statement_id)
 
+  defp texts(runtime) do
+    %OpenUI.Element{props: %{"children" => children}} = OpenUI.Runtime.tree(runtime)
+    for %OpenUI.Element{type: "Text", props: props} <- children, do: props["text"]
+  end
+
   defp metric_value(runtime) do
     %OpenUI.Element{props: %{"children" => children}} = OpenUI.Runtime.tree(runtime)
     Enum.find_value(children, &(&1.type == "Metric" && &1.props["value"]))
@@ -110,5 +115,122 @@ defmodule OpenUI.Runtime.QueriesTest do
     assert {runtime, :unchanged} = OpenUI.Runtime.take_errors(runtime)
     {runtime, _} = OpenUI.Runtime.query_result(runtime, "t", %{}, {:ok, %{"rows" => []}})
     assert {_runtime, {:changed, []}} = OpenUI.Runtime.take_errors(runtime)
+  end
+
+  test "fetches nothing while the stream is open and the latest arguments when it ends" do
+    library = OpenUI.Conformance.library()
+
+    program =
+      OpenUI.Parser.parse(
+        ~S"""
+        $status = "open"
+        root = Stack([filter, Metric("n", @Count(t.rows))])
+        filter = Input("status", "S", $status)
+        t = Query("list", {status: $status}, {rows: []})
+        """,
+        library
+      )
+
+    {runtime, []} =
+      library
+      |> OpenUI.Runtime.new(fields: %{"Input" => [name: "name", type: "input"]})
+      |> OpenUI.Runtime.load(program)
+
+    assert {runtime, []} = OpenUI.Runtime.input(runtime, key_of(runtime, "filter"), "closed")
+
+    assert {_runtime, [{:run_query, "t", "list", %{"status" => "closed"}}]} =
+             OpenUI.Runtime.finish(runtime)
+  end
+
+  test "asks for a query written without arguments, or without a tool, with empty ones" do
+    library = OpenUI.Conformance.library()
+
+    program =
+      OpenUI.Parser.parse(
+        ~S"""
+        root = Stack([Metric("n", @Count(t.rows) + @Count(u.rows))])
+        t = Query("list")
+        u = Query()
+        """,
+        library
+      )
+
+    {runtime, []} = library |> OpenUI.Runtime.new() |> OpenUI.Runtime.load(program)
+
+    {_runtime, effects} = OpenUI.Runtime.finish(runtime)
+    assert effects == [{:run_query, "t", "list", %{}}, {:run_query, "u", "", %{}}]
+  end
+
+  test "fetches a query again when a button runs it" do
+    runtime =
+      start(~S"""
+      root = Stack([Metric("n", @Count(t.rows)), reload])
+      t = Query("list", {}, {rows: []})
+      reload = Button("Reload", @Run(t))
+      """)
+
+    {runtime, []} = OpenUI.Runtime.query_result(runtime, "t", %{}, {:ok, %{"rows" => [1]}})
+
+    assert {runtime, [{:run_query, "t", "list", %{}}]} =
+             OpenUI.Runtime.trigger(runtime, key_of(runtime, "reload"), "action")
+
+    assert OpenUI.Runtime.query_status(runtime).refetching?
+    assert metric_value(runtime) == 1
+  end
+
+  test "shows the status of a mutation before, while and after it runs" do
+    runtime =
+      start(~S"""
+      root = Stack([Text(m.status), Text(m.error || "no error"), save])
+      m = Mutation("create", {})
+      save = Button("Save", @Run(m))
+      """)
+
+    assert texts(runtime) == ["idle", "no error"]
+
+    {runtime, [{:run_mutation, run_ref, "create", %{}}]} =
+      OpenUI.Runtime.trigger(runtime, key_of(runtime, "save"), "action")
+
+    assert texts(runtime) == ["loading", "no error"]
+
+    {runtime, []} = OpenUI.Runtime.mutation_result(runtime, run_ref, {:error, "quota exceeded"})
+
+    assert ["error", message] = texts(runtime)
+    assert message =~ "quota exceeded"
+
+    {runtime, [{:run_mutation, run_ref, "create", %{}}]} =
+      OpenUI.Runtime.trigger(runtime, key_of(runtime, "save"), "action")
+
+    {runtime, []} = OpenUI.Runtime.mutation_result(runtime, run_ref, {:ok, %{"id" => 7}})
+    assert texts(runtime) == ["success", "no error"]
+  end
+
+  test "skips the steps whose query or mutation an edit removed while a mutation ran" do
+    library = OpenUI.Conformance.library()
+
+    runtime =
+      start(~S"""
+      root = Stack([Metric("n", @Count(t.rows)), save])
+      t = Query("list", {}, {rows: []})
+      m = Mutation("create", {})
+      audit = Mutation("log", {})
+      save = Button("Save", Action([@Run(m), @Run(t), @Run(audit)]))
+      """)
+
+    {runtime, [{:run_mutation, run_ref, "create", %{}}]} =
+      OpenUI.Runtime.trigger(runtime, key_of(runtime, "save"), "action")
+
+    edited =
+      OpenUI.Parser.parse(
+        ~S"""
+        root = Stack([Text("Saved")])
+        m = Mutation("create", {})
+        """,
+        library
+      )
+
+    {runtime, []} = OpenUI.Runtime.load(runtime, edited)
+
+    assert {_runtime, []} = OpenUI.Runtime.mutation_result(runtime, run_ref, {:ok, %{}})
   end
 end
