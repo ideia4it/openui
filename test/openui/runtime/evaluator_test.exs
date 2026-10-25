@@ -143,6 +143,22 @@ defmodule OpenUI.Runtime.EvaluatorTest do
     assert card_texts.(shadowed) == [{"a", ["x", "y"]}, {"b", ["z"]}]
   end
 
+  test "keeps the outer loop variable in an action of a nested @Each" do
+    root =
+      render(~S"""
+      root = Stack(@Each(groups, "g", Card(g.name, @Each(g.items, "i", Button(i, @Set($picked, g.name))))))
+      groups = [{name: "a", items: ["x", "y"]}, {name: "b", items: ["z"]}]
+      """)
+
+    actions =
+      for card <- root["props"]["children"], button <- card["props"]["children"] do
+        [%{"args" => ["$picked", group]}] = button["props"]["action"]["actions"]
+        {button["props"]["label"], group}
+      end
+
+    assert actions == [{"x", "a"}, {"y", "a"}, {"z", "b"}]
+  end
+
   test "reads a bare name as the @Each loop variable" do
     root =
       render(~S"""
