@@ -236,12 +236,13 @@ defmodule OpenUI.Parser do
 
   # Follows references to the entry's value: a component call that did not
   # render was dropped by validation, which reported it already.
-  defp component_call?(ast, symbols, seen \\ MapSet.new())
+  # A plain map, not a MapSet: OTP 28 dialyzer loses MapSet opacity in this recursion.
+  defp component_call?(ast, symbols, seen \\ %{})
 
   defp component_call?({:ref, name}, symbols, seen) do
-    if MapSet.member?(seen, name) or not Map.has_key?(symbols, name),
+    if Map.has_key?(seen, name) or not Map.has_key?(symbols, name),
       do: false,
-      else: component_call?(Map.fetch!(symbols, name), symbols, MapSet.put(seen, name))
+      else: component_call?(Map.fetch!(symbols, name), symbols, Map.put(seen, name, true))
   end
 
   defp component_call?({:component, name, _args}, _symbols, _seen),
