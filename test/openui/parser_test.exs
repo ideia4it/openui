@@ -55,6 +55,13 @@ defmodule OpenUI.ParserTest do
     assert [%OpenUI.Error{code: "no-root", severity: nil}] = program.errors
   end
 
+  test "reports an enum mismatch on text cut inside a multibyte character" do
+    program =
+      OpenUI.Parser.parse(~s|root = Stack([Tag("x", "pur| <> <<195>> <> ~s|")])|, library())
+
+    assert [%OpenUI.Error{code: "type-mismatch"}] = program.errors
+  end
+
   test "flags a program cut inside a string as incomplete" do
     assert OpenUI.Parser.parse(~s|root = Stack([t])\nt = Text("a|, library()).incomplete
   end

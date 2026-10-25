@@ -30,7 +30,7 @@ defmodule OpenUI.RobustnessTest do
     end
   end
 
-  property "every prefix of every fixture loads into the runtime without raising" do
+  property "every prefix of every fixture loads into the runtime and encodes as JSON" do
     check all(
             id <- member_of(Conformance.program_inputs_ids()),
             text = Conformance.input_text(id),
@@ -40,6 +40,21 @@ defmodule OpenUI.RobustnessTest do
       program = OpenUI.Parser.parse(binary_part(text, 0, size), library)
       {runtime, _effects} = library |> OpenUI.Runtime.new([]) |> OpenUI.Runtime.load(program)
       assert {_runtime, _effects} = OpenUI.Runtime.finish(runtime)
+      assert is_binary(JSON.encode!(OpenUI.Canonical.result(program, library)["root"]))
+    end
+  end
+
+  test "every prefix of the fixtures with multibyte text renders to JSON-encodable values" do
+    library = Conformance.library()
+
+    for id <- Conformance.program_inputs_ids(),
+        text = Conformance.input_text(id),
+        byte_size(text) != String.length(text),
+        size <- 0..byte_size(text) do
+      program = OpenUI.Parser.parse(binary_part(text, 0, size), library)
+
+      assert is_binary(JSON.encode!(OpenUI.Canonical.result(program, library)["root"])),
+             "#{id} at #{size}"
     end
   end
 

@@ -206,8 +206,7 @@ defmodule OpenUI.Runtime.Evaluator do
   defp member(list, field) when is_list(list), do: Enum.map(list, &member_of_item(&1, field))
   defp member(map, field) when is_map(map) and not is_struct(map), do: Map.get(map, field)
 
-  defp member(string, "length") when is_binary(string),
-    do: div(byte_size(:unicode.characters_to_binary(string, :utf8, :utf16)), 2)
+  defp member(string, "length") when is_binary(string), do: Value.text_length(string)
 
   defp member(_other, _field), do: nil
 

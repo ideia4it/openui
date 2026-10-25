@@ -6,8 +6,8 @@ defmodule OpenUI.Runtime.HostValue do
   Atom keys and atoms become strings (except `true`, `false` and `nil`),
   tuples become lists, a struct that implements `String.Chars` becomes its
   string (Decimal, Date, DateTime, as Jason would encode them), any other
-  struct becomes a map, and values JSON cannot hold (pids, functions,
-  references, ports) become `nil`.
+  struct becomes a map, bytes that are not UTF-8 become U+FFFD, and values
+  JSON cannot hold (pids, functions, references, ports) become `nil`.
   """
 
   alias OpenUI.Runtime.Value
@@ -15,7 +15,7 @@ defmodule OpenUI.Runtime.HostValue do
   @doc "Normalizes a host value."
   @spec normalize(term()) :: term()
   def normalize(value) when value in [nil, true, false], do: value
-  def normalize(value) when is_binary(value), do: value
+  def normalize(value) when is_binary(value), do: String.replace_invalid(value)
   def normalize(value) when is_number(value), do: Value.normalize_number(value)
   def normalize(value) when is_atom(value), do: Atom.to_string(value)
   def normalize(value) when is_list(value), do: Enum.map(value, &normalize/1)

@@ -211,8 +211,8 @@ defmodule OpenUI.Parser.Validator do
     if not scalar?(value) or Enum.any?(members, &(&1 == value)) do
       {{:keep, value}, ctx}
     else
-      expected = "one of [" <> Enum.map_join(members, ", ", &JSON.encode!/1) <> "]"
-      {:invalid, mismatch(ctx, owner, path, expected, JSON.encode!(value))}
+      expected = "one of [" <> Enum.map_join(members, ", ", &quote_value/1) <> "]"
+      {:invalid, mismatch(ctx, owner, path, expected, quote_value(value))}
     end
   end
 
@@ -221,6 +221,13 @@ defmodule OpenUI.Parser.Validator do
       do: {{:keep, value}, ctx},
       else: {:invalid, mismatch(ctx, owner, path, expected, js_type(value))}
   end
+
+  # Model text may be cut inside a multibyte character, which JSON cannot
+  # encode; its stray bytes become U+FFFD.
+  defp quote_value(value) when is_binary(value),
+    do: value |> String.replace_invalid() |> JSON.encode!()
+
+  defp quote_value(value), do: JSON.encode!(value)
 
   defp scalar_type("string"), do: "string"
   defp scalar_type(type) when type in ["number", "integer"], do: "number"

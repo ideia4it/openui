@@ -33,7 +33,7 @@ defmodule OpenUI.Runtime.Validation do
   defp empty?(value), do: value in [nil, "", []] or value == %{}
 
   defp passes?("required", value, _argument), do: not empty?(value)
-  defp passes?("email", value, _argument), do: is_binary(value) and Regex.match?(@email, value)
+  defp passes?("email", value, _argument), do: is_binary(value) and matches?(@email, value)
   defp passes?("url", value, _argument), do: is_binary(value) and absolute_url?(value)
   defp passes?("numeric", value, _argument) when is_number(value), do: true
 
@@ -43,10 +43,10 @@ defmodule OpenUI.Runtime.Validation do
   defp passes?("numeric", _value, _argument), do: false
 
   defp passes?("minLength", value, minimum) when is_binary(value),
-    do: utf16_length(value) >= Value.to_number(minimum)
+    do: Value.text_length(value) >= Value.to_number(minimum)
 
   defp passes?("maxLength", value, maximum) when is_binary(value),
-    do: utf16_length(value) <= Value.to_number(maximum)
+    do: Value.text_length(value) <= Value.to_number(maximum)
 
   defp passes?(rule, _value, _argument) when rule in ["minLength", "maxLength"], do: true
 
@@ -59,12 +59,16 @@ defmodule OpenUI.Runtime.Validation do
   # A pattern the regex engine cannot compile never fails the field.
   defp passes?("pattern", value, pattern) when is_binary(value) and is_binary(pattern) do
     case Regex.compile(pattern, "u") do
-      {:ok, regex} -> Regex.match?(regex, value)
+      {:ok, regex} -> matches?(regex, value)
       {:error, _reason} -> true
     end
   end
 
   defp passes?("pattern", _value, _pattern), do: true
+
+  # A Unicode regex raises on bytes that are not UTF-8, such as text cut
+  # mid-character; such text does not match.
+  defp matches?(regex, value), do: String.valid?(value) and Regex.match?(regex, value)
 
   defp absolute_url?(value) do
     case URI.new(value) do
@@ -88,7 +92,4 @@ defmodule OpenUI.Runtime.Validation do
       nil -> :nan
     end
   end
-
-  defp utf16_length(string),
-    do: div(byte_size(:unicode.characters_to_binary(string, :utf8, :utf16)), 2)
 end

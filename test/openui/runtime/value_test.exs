@@ -50,6 +50,10 @@ defmodule OpenUI.Runtime.ValueTest do
     assert Value.truthy?([]) and Value.truthy?(%{}) and Value.truthy?("0")
   end
 
+  test "compares text cut inside a multibyte character without raising" do
+    assert Collation.compare("caf" <> <<195>>, "cafe") in [:lt, :eq, :gt]
+  end
+
   test "sorts strings like the ICU root collation for letters" do
     assert Enum.sort(["b", "B", "a", "é", "Z"], &(Collation.compare(&1, &2) != :gt)) ==
              ["a", "b", "B", "é", "Z"]

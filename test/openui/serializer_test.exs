@@ -23,6 +23,12 @@ defmodule OpenUI.SerializerTest do
              ~s|root = Stack([t, Card("C", [Text("x", "body")])], "column")\nt = Tag("new", "green")\n$tab = "a"|
   end
 
+  test "writes text cut inside a multibyte character without raising" do
+    library = OpenUI.Conformance.library()
+    tree = tree("root = Stack([Text(\"caf" <> <<195>> <> "\")])", library)
+    assert OpenUI.Serializer.to_source(tree, library) =~ "Text("
+  end
+
   test "fills holes with null, trims trailing optional nulls and keeps grouping" do
     library = OpenUI.Conformance.library()
 

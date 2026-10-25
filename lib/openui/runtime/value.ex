@@ -59,6 +59,18 @@ defmodule OpenUI.Runtime.Value do
 
   def stringify(_object), do: "[object Object]"
 
+  @doc """
+  The length of a string as JavaScript counts it, in UTF-16 code units. Bytes
+  that are not valid UTF-8, as in text cut mid-character, count one each.
+  """
+  @spec text_length(String.t()) :: non_neg_integer()
+  def text_length(string) when is_binary(string) do
+    case :unicode.characters_to_binary(string, :utf8, :utf16) do
+      utf16 when is_binary(utf16) -> div(byte_size(utf16), 2)
+      {_error_or_incomplete, utf16, rest} -> div(byte_size(utf16), 2) + byte_size(rest)
+    end
+  end
+
   @doc "ToBoolean."
   @spec truthy?(term()) :: boolean()
   def truthy?(value) when value in [nil, false, "", 0], do: false

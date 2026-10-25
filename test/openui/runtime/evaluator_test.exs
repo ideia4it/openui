@@ -1,6 +1,8 @@
 defmodule OpenUI.Runtime.EvaluatorTest do
   use ExUnit.Case, async: true
 
+  alias OpenUI.Runtime.{Context, Evaluator}
+
   defp render(source) do
     library = OpenUI.Conformance.library()
     OpenUI.Canonical.result(OpenUI.Parser.parse(source, library), library)["root"]
@@ -33,6 +35,11 @@ defmodule OpenUI.Runtime.EvaluatorTest do
                {"a", %{"actions" => [%{"action" => "Set", "args" => ["$sel", 1]}]}},
                {"b", %{"actions" => [%{"action" => "Set", "args" => ["$sel", 2]}]}}
              ]
+  end
+
+  test "measures text cut inside a multibyte character without raising" do
+    ctx = %Context{library: OpenUI.Conformance.library()}
+    assert Evaluator.evaluate({:member, {:literal, "a" <> <<195>>}, "length"}, ctx) == 2
   end
 
   test "turns a raising custom function into a runtime-error and a null value" do

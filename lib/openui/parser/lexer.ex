@@ -190,6 +190,7 @@ defmodule OpenUI.Parser.Lexer do
         _ -> raw |> String.replace_prefix("\"", "") |> strip_closing_quote(closed?)
       end
 
+    value = String.replace_invalid(value)
     token = if closed?, do: {:string, value}, else: {:string, value, :unterminated}
     {token, rest}
   end
@@ -216,8 +217,12 @@ defmodule OpenUI.Parser.Lexer do
     end
   end
 
-  defp single_quoted(<<>>, acc), do: {{:string, IO.iodata_to_binary(acc), :unterminated}, <<>>}
-  defp single_quoted(<<?', rest::binary>>, acc), do: {{:string, IO.iodata_to_binary(acc)}, rest}
+  # Text cut inside a multibyte character would carry stray bytes into the
+  # program and break anything that encodes it; they become U+FFFD.
+  defp text(acc), do: acc |> IO.iodata_to_binary() |> String.replace_invalid()
+
+  defp single_quoted(<<>>, acc), do: {{:string, text(acc), :unterminated}, <<>>}
+  defp single_quoted(<<?', rest::binary>>, acc), do: {{:string, text(acc)}, rest}
   defp single_quoted(<<?\\, ?n, rest::binary>>, acc), do: single_quoted(rest, [acc, ?\n])
   defp single_quoted(<<?\\, ?t, rest::binary>>, acc), do: single_quoted(rest, [acc, ?\t])
   defp single_quoted(<<?\\, char, rest::binary>>, acc), do: single_quoted(rest, [acc, char])
