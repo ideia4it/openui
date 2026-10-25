@@ -11,6 +11,7 @@ defmodule OpenUI.Runtime.Evaluator do
   alias OpenUI.{ActionPlan, Binding, Builtins, Element, Error, Library, Program, Unknown}
   alias OpenUI.Parser.{Materializer, Validator}
   alias OpenUI.Runtime.Context
+  alias OpenUI.Runtime.HostValue
   alias OpenUI.Runtime.Value
 
   @idle_mutation %{"status" => "idle", "data" => nil, "error" => nil}
@@ -373,7 +374,7 @@ defmodule OpenUI.Runtime.Evaluator do
   defp run_function(function, values, env, errors) do
     result = function.impl.(values)
 
-    case check_returns(function, normalize_result(result), env) do
+    case check_returns(function, HostValue.normalize(result), env) do
       {:ok, value} -> {value, errors}
       {:invalid, messages} -> {nil, report(errors, env, messages)}
     end
@@ -384,9 +385,6 @@ defmodule OpenUI.Runtime.Evaluator do
     kind, reason ->
       {nil, report(errors, env, ["@#{function.name} failed: #{inspect({kind, reason})}"])}
   end
-
-  defp normalize_result(number) when is_number(number), do: Value.normalize_number(number)
-  defp normalize_result(value), do: value
 
   # A library action whose arguments do not check out does nothing, even when
   # a default could stand in, so it never runs with a value the model did not

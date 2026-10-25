@@ -27,9 +27,10 @@ defmodule OpenUI.Runtime do
   rules (`"rules"` by default).
   """
 
-  alias OpenUI.{ActionPlan, Binding, Element, Event, Library, Program}
-  alias OpenUI.Runtime.{Context, Evaluator, Validation}
+  alias OpenUI.{ActionPlan, Binding, Element, Error, Event, Library, Program}
+  alias OpenUI.Runtime.{Context, Evaluator, HostValue, Validation, Value}
 
+  @derive {Inspect, only: [:finished?, :store, :field_errors]}
   defstruct [
     :library,
     program: %Program{},
@@ -41,7 +42,11 @@ defmodule OpenUI.Runtime do
     tree: nil,
     elements: %{},
     render_errors: [],
-    field_errors: %{}
+    field_errors: %{},
+    queries: %{},
+    mutations: %{},
+    runs: %{},
+    emitted_errors: []
   ]
 
   @type effect ::
@@ -75,12 +80,85 @@ defmodule OpenUI.Runtime do
   @spec load(t(), Program.t()) :: {t(), [effect()]}
   def load(%__MODULE__{} = runtime, %Program{} = program) do
     runtime = %{runtime | program: program} |> apply_defaults() |> render()
-    {runtime, []}
+    if runtime.finished?, do: sync_queries(runtime), else: {runtime, []}
   end
 
-  @doc "Marks the end of the stream."
+  @doc "Marks the end of the stream: every query runs."
   @spec finish(t()) :: {t(), [effect()]}
-  def finish(%__MODULE__{} = runtime), do: {%{runtime | finished?: true}, []}
+  def finish(%__MODULE__{} = runtime), do: sync_queries(%{runtime | finished?: true})
+
+  @doc """
+  The tool answered a query. A result for arguments that are no longer the
+  query's current ones is discarded. `{:error, {:tool_not_found, names}}`
+  reports `tool-not-found` with the available names; any other error
+  reports `tool-error`. Either way the query keeps its last good data.
+  """
+  @spec query_result(t(), String.t(), map(), {:ok, term()} | {:error, term()}) ::
+          {t(), [effect()]}
+  def query_result(%__MODULE__{} = runtime, query_id, args, result) do
+    case Map.fetch(runtime.queries, query_id) do
+      {:ok, %{args: ^args} = entry} ->
+        entry = settle_query(entry, query_id, result)
+        runtime = render(%{runtime | queries: Map.put(runtime.queries, query_id, entry)})
+        {runtime, refresh_effects(query_id, entry)}
+
+      _stale_or_unknown ->
+        {runtime, []}
+    end
+  end
+
+  @doc "Fetches a query again, as its refresh interval asks."
+  @spec refresh(t(), String.t()) :: {t(), [effect()]}
+  def refresh(%__MODULE__{} = runtime, query_id) do
+    case Enum.find(runtime.program.queries, &(&1.id == query_id)) do
+      nil -> {runtime, []}
+      query -> fetch(runtime, query)
+    end
+  end
+
+  @doc """
+  The tool answered a mutation started by `{:run_mutation, run_ref, ...}`.
+  On success the rest of its action plan runs; on failure it stops.
+  """
+  @spec mutation_result(t(), reference(), {:ok, term()} | {:error, term()}) :: {t(), [effect()]}
+  def mutation_result(%__MODULE__{} = runtime, run_ref, result) do
+    case Map.pop(runtime.runs, run_ref) do
+      {nil, _runs} -> {runtime, []}
+      {run, runs} -> settle_mutation(%{runtime | runs: runs}, run, result)
+    end
+  end
+
+  @doc "Fetch state of the queries, for a loading indicator and error display."
+  @spec query_status(t()) :: %{loading?: boolean(), refetching?: boolean(), errors: [Error.t()]}
+  def query_status(%__MODULE__{queries: queries}) do
+    entries = Map.values(queries)
+
+    %{
+      loading?: Enum.any?(entries, & &1.loading?),
+      refetching?: Enum.any?(entries, & &1.refetching?),
+      errors: for(%{error: %Error{} = error} <- entries, do: error)
+    }
+  end
+
+  @doc """
+  The error list to send to the host, only when it changed since the last
+  call (language.md, section 8.3). While a stream is open nothing is
+  reported, and a list left from an earlier stream is cleared with `[]`.
+  """
+  @spec take_errors(t()) :: {t(), :unchanged | {:changed, [Error.t()]}}
+  def take_errors(%__MODULE__{finished?: false, emitted_errors: []} = runtime),
+    do: {runtime, :unchanged}
+
+  def take_errors(%__MODULE__{finished?: false} = runtime),
+    do: {%{runtime | emitted_errors: []}, {:changed, []}}
+
+  def take_errors(%__MODULE__{} = runtime) do
+    current = current_errors(runtime)
+
+    if current == runtime.emitted_errors,
+      do: {runtime, :unchanged},
+      else: {%{runtime | emitted_errors: current}, {:changed, current}}
+  end
 
   @doc "The evaluated tree, with a `key` on every element."
   @spec tree(t()) :: Element.t() | nil
@@ -123,7 +201,7 @@ defmodule OpenUI.Runtime do
   @spec input(t(), String.t(), term()) :: {t(), [effect()]}
   def input(%__MODULE__{} = runtime, key, value) do
     case Map.fetch(runtime.elements, key) do
-      {:ok, element} -> {write_field(runtime, key, element, value), []}
+      {:ok, element} -> runtime |> write_field(key, element, value) |> refetch_changed_deps()
       :error -> {runtime, []}
     end
   end
@@ -172,8 +250,21 @@ defmodule OpenUI.Runtime do
   defp context(runtime) do
     %Context{
       library: runtime.library,
-      state: Map.new(runtime.store, fn {name, value} -> {name, unwrap(value)} end)
+      state: plain_state(runtime),
+      queries: Map.new(runtime.program.queries, &{&1.id, query_value(runtime, &1)}),
+      mutations: Map.new(runtime.mutations, fn {id, mutation} -> {id, mutation.result} end)
     }
+  end
+
+  defp plain_state(runtime),
+    do: Map.new(runtime.store, fn {name, value} -> {name, unwrap(value)} end)
+
+  # References resolve to the latest result, or to the defaults before the first one.
+  defp query_value(runtime, query) do
+    case Map.get(runtime.queries, query.id) do
+      %{fetched?: true, data: data} -> data
+      _not_fetched -> Evaluator.evaluate(query.defaults, %Context{library: runtime.library})
+    end
   end
 
   defp unwrap(%{"value" => value, "componentType" => _type}), do: value
@@ -306,6 +397,12 @@ defmodule OpenUI.Runtime do
 
   defp run_steps(runtime, [], _form, effects), do: {runtime, Enum.reverse(effects)}
 
+  # A mutation run is awaited: the steps after it wait for mutation_result/3.
+  defp run_steps(runtime, [{:run, id, :mutation} | rest], form, effects) do
+    {runtime, mutation_effects} = start_mutation(runtime, id, rest, form)
+    {runtime, Enum.reverse(effects, mutation_effects)}
+  end
+
   defp run_steps(runtime, [step | rest], form, effects) do
     {runtime, step_effects} = run_step(runtime, step, form)
     run_steps(runtime, rest, form, Enum.reverse(step_effects, effects))
@@ -313,7 +410,7 @@ defmodule OpenUI.Runtime do
 
   defp run_step(runtime, {:set, name, value}, _form) do
     value = Evaluator.evaluate(value, context(runtime))
-    {runtime |> set_state(name, value) |> render(), []}
+    runtime |> set_state(name, value) |> render() |> refetch_changed_deps()
   end
 
   defp run_step(runtime, {:reset, targets}, _form) do
@@ -331,7 +428,7 @@ defmodule OpenUI.Runtime do
         }
       end)
 
-    {render(runtime), []}
+    runtime |> render() |> refetch_changed_deps()
   end
 
   defp run_step(runtime, {:to_assistant, message, context}, form) do
@@ -345,7 +442,12 @@ defmodule OpenUI.Runtime do
   defp run_step(runtime, {:custom, name, params}, form),
     do: {runtime, [{:emit, event(runtime, name, "", params, form)}]}
 
-  defp run_step(runtime, {:run, _id, _kind}, _form), do: {runtime, []}
+  defp run_step(runtime, {:run, id, :query}, _form) do
+    case Enum.find(runtime.program.queries, &(&1.id == id)) do
+      nil -> {runtime, []}
+      query -> fetch(runtime, query)
+    end
+  end
 
   defp event(runtime, type, message, params, form) do
     %Event{
@@ -359,4 +461,188 @@ defmodule OpenUI.Runtime do
 
   defp form_state(runtime, nil), do: runtime.store
   defp form_state(runtime, form), do: %{form => form_fields(runtime, form)}
+
+  # Queries run once the stream ends, and again on load when an edit changed
+  # their tool or arguments.
+  defp sync_queries(runtime) do
+    ctx = context(runtime)
+    changed = Enum.reject(runtime.program.queries, &same_request?(runtime, &1, ctx))
+    fetch_all(runtime, changed)
+  end
+
+  defp same_request?(runtime, query, ctx) do
+    {tool, args} = request(query, ctx)
+    match?(%{tool: ^tool, args: ^args}, Map.get(runtime.queries, query.id))
+  end
+
+  # A query fetches again when a $variable written literally in its args
+  # changes; state reached through a referenced statement does not count.
+  defp refetch_changed_deps(%{finished?: false} = runtime), do: {runtime, []}
+
+  defp refetch_changed_deps(runtime) do
+    state = plain_state(runtime)
+    changed = Enum.filter(runtime.program.queries, &deps_changed?(runtime, &1, state))
+    fetch_all(runtime, changed)
+  end
+
+  defp deps_changed?(runtime, query, state) do
+    case Map.get(runtime.queries, query.id) do
+      %{deps: deps} -> Map.take(state, query.deps) != deps
+      nil -> false
+    end
+  end
+
+  defp fetch_all(runtime, queries) do
+    Enum.reduce(queries, {runtime, []}, fn query, {runtime, effects} ->
+      {runtime, more} = fetch(runtime, query)
+      {runtime, effects ++ more}
+    end)
+  end
+
+  defp fetch(runtime, query) do
+    ctx = context(runtime)
+    {tool, args} = request(query, ctx)
+    previous = Map.get(runtime.queries, query.id, %{fetched?: false, data: nil, error: nil})
+
+    entry = %{
+      tool: tool,
+      args: args,
+      deps: Map.take(ctx.state, query.deps),
+      refresh: Evaluator.evaluate(query.refresh, ctx),
+      fetched?: previous.fetched?,
+      data: previous.data,
+      error: previous.error,
+      loading?: true,
+      refetching?: previous.fetched?
+    }
+
+    runtime = render(%{runtime | queries: Map.put(runtime.queries, query.id, entry)})
+    {runtime, [{:run_query, query.id, tool, args}]}
+  end
+
+  defp request(%{tool: tool, args: args}, ctx) do
+    tool = tool |> Evaluator.evaluate(ctx) |> tool_name()
+
+    args =
+      case Evaluator.evaluate(args, ctx) do
+        map when is_map(map) and not is_struct(map) -> map
+        _other -> %{}
+      end
+
+    {tool, args}
+  end
+
+  defp tool_name(nil), do: ""
+  defp tool_name(name), do: Value.stringify(name)
+
+  defp settle_query(entry, _query_id, {:ok, data}),
+    do: %{
+      entry
+      | data: HostValue.normalize(data),
+        fetched?: true,
+        error: nil,
+        loading?: false,
+        refetching?: false
+    }
+
+  defp settle_query(entry, query_id, {:error, reason}),
+    do: %{
+      entry
+      | error: tool_error(:query, query_id, entry.tool, reason),
+        loading?: false,
+        refetching?: false
+    }
+
+  defp refresh_effects(query_id, %{refresh: seconds}) when is_number(seconds) and seconds > 0,
+    do: [{:schedule_refresh, query_id, seconds}]
+
+  defp refresh_effects(_query_id, _entry), do: []
+
+  # While loading, a second run is rejected and the rest of its plan stops.
+  defp start_mutation(runtime, id, rest, form) do
+    mutation = Enum.find(runtime.program.mutations, &(&1.id == id))
+
+    case {mutation, Map.get(runtime.mutations, id)} do
+      {nil, _state} ->
+        {runtime, []}
+
+      {_mutation, %{result: %{"status" => "loading"}}} ->
+        {runtime, []}
+
+      {mutation, _state} ->
+        {tool, args} = request(mutation, context(runtime))
+        run_ref = make_ref()
+
+        loading = %{
+          result: %{"status" => "loading", "data" => nil, "error" => nil},
+          error: nil,
+          tool: tool
+        }
+
+        runtime = %{
+          runtime
+          | mutations: Map.put(runtime.mutations, id, loading),
+            runs: Map.put(runtime.runs, run_ref, %{id: id, steps: rest, form: form})
+        }
+
+        {render(runtime), [{:run_mutation, run_ref, tool, args}]}
+    end
+  end
+
+  defp settle_mutation(runtime, run, {:ok, data}) do
+    tool = runtime.mutations[run.id].tool
+
+    success = %{
+      result: %{"status" => "success", "data" => HostValue.normalize(data), "error" => nil},
+      error: nil,
+      tool: tool
+    }
+
+    runtime = render(%{runtime | mutations: Map.put(runtime.mutations, run.id, success)})
+    run_steps(runtime, run.steps, run.form, [])
+  end
+
+  defp settle_mutation(runtime, run, {:error, reason}) do
+    tool = runtime.mutations[run.id].tool
+    error = tool_error(:mutation, run.id, tool, reason)
+
+    failed = %{
+      result: %{"status" => "error", "data" => nil, "error" => error.message},
+      error: error,
+      tool: tool
+    }
+
+    {render(%{runtime | mutations: Map.put(runtime.mutations, run.id, failed)}), []}
+  end
+
+  defp tool_error(source, statement_id, tool, {:tool_not_found, available}) do
+    %Error{
+      source: source,
+      code: "tool-not-found",
+      statement_id: statement_id,
+      tool_name: tool,
+      message: ~s(Tool "#{tool}" was not found),
+      hint: available_tools(available)
+    }
+  end
+
+  defp tool_error(source, statement_id, tool, reason) do
+    %Error{
+      source: source,
+      code: "tool-error",
+      statement_id: statement_id,
+      tool_name: tool,
+      message:
+        ~s(Tool "#{tool}" failed: #{if is_binary(reason), do: reason, else: inspect(reason)})
+    }
+  end
+
+  defp available_tools([]), do: "No tools are available"
+  defp available_tools(names), do: "Available tools: " <> Enum.join(names, ", ")
+
+  defp current_errors(runtime) do
+    query_errors = for {_id, %{error: %Error{} = error}} <- runtime.queries, do: error
+    mutation_errors = for {_id, %{error: %Error{} = error}} <- runtime.mutations, do: error
+    runtime.program.errors ++ runtime.render_errors ++ query_errors ++ mutation_errors
+  end
 end

@@ -12,6 +12,7 @@ defmodule OpenUI.Library do
   alias OpenUI.JSON.Object
   alias OpenUI.Library.{Callable, Component, Group, Prop, Rules}
 
+  @derive {Inspect, only: [:id, :version, :root]}
   defstruct [
     :id,
     :version,

@@ -16,14 +16,6 @@ defmodule OpenUI.Conformance do
     |> Enum.sort()
   end
 
-  @pending_file Path.expand("conformance_pending.txt", __DIR__)
-  @external_resource @pending_file
-  @pending (if File.exists?(@pending_file) do
-              @pending_file |> File.read!() |> String.split("\n", trim: true) |> MapSet.new()
-            else
-              MapSet.new()
-            end)
-
   @optional_keys ["state", "statements", "errorObjects"]
 
   def case_ids, do: program_case_ids() ++ interaction_case_ids()
@@ -48,8 +40,6 @@ defmodule OpenUI.Conformance do
     do: key_of(Map.values(map), statement_id)
 
   def key_of(_value, _statement_id), do: nil
-
-  def pending?(id), do: MapSet.member?(@pending, id)
 
   @doc "Runs one case; returns the list of differences, empty when it passes."
   def run(id) do
@@ -113,7 +103,29 @@ defmodule OpenUI.Conformance do
   defp run_effect({:emit, event}, {runtime, host}),
     do: {runtime, %{host | events: [event | host.events]}}
 
-  defp run_effect(_effect, acc), do: acc
+  defp run_effect({:run_query, query_id, tool, args}, {runtime, host}) do
+    {result, host} = call_tool(host, tool, args)
+    {runtime, effects} = OpenUI.Runtime.query_result(runtime, query_id, args, result)
+    run_effects(runtime, effects, host)
+  end
+
+  defp run_effect({:run_mutation, run_ref, tool, args}, {runtime, host}) do
+    {result, host} = call_tool(host, tool, args)
+    {runtime, effects} = OpenUI.Runtime.mutation_result(runtime, run_ref, result)
+    run_effects(runtime, effects, host)
+  end
+
+  defp run_effect({:schedule_refresh, _query_id, _seconds}, acc), do: acc
+
+  defp call_tool(host, tool, args) do
+    case Map.fetch(host.tools, tool) do
+      {:ok, result} ->
+        {{:ok, result}, %{host | calls: [%{"tool" => tool, "args" => args} | host.calls]}}
+
+      :error ->
+        {{:error, {:tool_not_found, Map.keys(host.tools)}}, host}
+    end
+  end
 
   defp events_diff(expected, events) do
     wanted = Map.get(expected, "events", [])
