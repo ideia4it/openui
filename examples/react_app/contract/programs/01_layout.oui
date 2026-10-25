@@ -1,0 +1,5 @@
+root = Stack([header, Card("Summary", [intro, total]), spotlight], "column")
+header = Text("Support", "heading")
+intro = Text("Tickets this week")
+total = Metric("Open", 12, {direction: "up", percent: 8})
+spotlight = Highlight(Card("Note", [Text("All good")]), true)

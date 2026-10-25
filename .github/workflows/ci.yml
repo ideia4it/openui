@@ -67,3 +67,27 @@ jobs:
           key: dialyzer-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-${{ hashFiles('mix.lock') }}
       - run: mix deps.get
       - run: mix dialyzer
+
+  contract:
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+      OPENUI_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18.4"
+          otp-version: "27.3"
+          version-type: loose
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.5"
+      - run: mix deps.get
+      - run: mix openui.gen.spec OpenUI.Test.ExampleLibrary --out examples/react_app/library.json --check
+      - working-directory: examples/react_app
+        run: |
+          bun install --frozen-lockfile
+          elixir contract/elixir_summary.exs
+          bun test contract
+          bunx tsc -p .

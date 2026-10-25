@@ -1,0 +1,5 @@
+$tab = "open"
+tickets = Query("list_tickets", {status: $tab}, {rows: [{id: 1, subject: "Login"}, {id: 2, subject: "Export"}], total: 2})
+close = Mutation("close_ticket", {id: 1})
+root = Stack([Metric("Open", tickets.total), rows, Text("Rows: " + @Count(tickets.rows)), Button("Close", Action([@Run(close), @Run(tickets), @ToAssistant("Closed it")]))])
+rows = Stack(@Each(tickets.rows, "row", Text(row.subject)))

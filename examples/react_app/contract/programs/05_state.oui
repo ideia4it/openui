@@ -1,0 +1,7 @@
+$tab = "open"
+$query = ""
+root = Stack([search, label, closed, reset, Select("tab", [SelectItem("open", "Open"), SelectItem("closed", "Closed")], $tab)])
+search = Input("search", "Search", $query)
+label = Text($tab == "open" ? "Showing open" : "Showing closed")
+closed = Button("Closed", @Set($tab, "closed"))
+reset = Button("Reset", @Reset($tab, $query))

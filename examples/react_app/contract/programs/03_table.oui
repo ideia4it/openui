@@ -1,0 +1,1 @@
+root = Stack([Table([Col("Ticket", [101, 102, 103]), Col("Subject", ["Login", "Invoice", "Export"]), Col("Mixed", [1, "two", null, true, {a: 1}])])])

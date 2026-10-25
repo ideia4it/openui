@@ -1,0 +1,5 @@
+root = Stack([ticketForm])
+ticketForm = Form("ticket", [subject, priority, send])
+subject = Input("subject", "Subject", null, {required: true, minLength: 3})
+priority = Select("priority", [SelectItem("high", "High"), SelectItem("low", "Low")])
+send = Button("Send", @ToAssistant("Create the ticket", {source: "form"}), "primary", @CopyToClipboard("ticket"))
