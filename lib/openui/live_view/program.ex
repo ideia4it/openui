@@ -330,7 +330,6 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
     end
 
     defp unknown_renderer([]), do: nil
-    defp unknown_renderer(nil), do: nil
 
     defp unknown_renderer(slot) do
       fn error ->
