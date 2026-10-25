@@ -1,6 +1,1 @@
-editing/001-replace-and-add
-editing/002-delete-and-gc
-editing/003-state-delete
-editing/005-fenced-patch
-editing/006-no-root-statement-no-gc
 state/005-validation-rules

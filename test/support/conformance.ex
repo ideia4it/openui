@@ -47,6 +47,28 @@ defmodule OpenUI.Conformance do
       Enum.map(diff(expected, OpenUI.Canonical.result(batch, library())), &("batch " <> &1))
   end
 
+  defp run_case(%{"patch.oui" => patch, "input.oui" => input} = files, _id) do
+    expected = JSON.decode!(files["expected.json"])
+    merged = OpenUI.Edit.merge(input, patch)
+
+    statements =
+      merged
+      |> String.split("\n")
+      |> Enum.flat_map(fn line ->
+        case Regex.run(~r/^(\$?\w+)\s*=(?!=)/, line) do
+          [_line, name] -> [name]
+          nil -> []
+        end
+      end)
+
+    actual =
+      OpenUI.Parser.parse(merged, library())
+      |> OpenUI.Canonical.result(library())
+      |> Map.put("statements", statements)
+
+    diff(expected, actual)
+  end
+
   defp run_case(%{"input.oui" => input, "expected.json" => expected}, id) do
     expected = JSON.decode!(expected)
     program = OpenUI.Parser.parse(input, library())
