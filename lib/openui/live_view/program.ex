@@ -56,8 +56,16 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
     end
 
     @impl true
-    def handle_event("openui:change", %{"_target" => ["openui", key], "openui" => values}, socket) do
-      {:noreply, guarded(socket, &input(&1, key, Map.get(values, key)))}
+    def handle_event(
+          "openui:change",
+          %{"_target" => ["openui", key], "openui" => %{} = values},
+          socket
+        ) do
+      value = Map.get(values, key)
+
+      if form_value?(value),
+        do: {:noreply, guarded(socket, &input(&1, key, value))},
+        else: {:noreply, socket}
     end
 
     def handle_event("openui:action", %{"key" => key, "prop" => prop}, socket) do
@@ -65,6 +73,12 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
     end
 
     def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+    # A browser form sends a field as text, a list of texts, or nothing;
+    # any other shape is a crafted request and is ignored.
+    defp form_value?(value) when is_binary(value) or is_nil(value), do: true
+    defp form_value?(values) when is_list(values), do: Enum.all?(values, &is_binary/1)
+    defp form_value?(_value), do: false
 
     @impl true
     def handle_async({:openui_query, query_id, args}, result, socket) do
