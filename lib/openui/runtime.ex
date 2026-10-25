@@ -83,6 +83,26 @@ defmodule OpenUI.Runtime do
     if runtime.finished?, do: sync_queries(runtime), else: {runtime, []}
   end
 
+  @doc """
+  Starts over for a new response in the same place: a new stream, the given
+  persisted state, no queries or mutations. The errors already reported are
+  kept, so `take_errors/2` clears them with `[]` (language.md, section 8.3).
+  """
+  @spec restart(t(), map()) :: t()
+  def restart(%__MODULE__{} = runtime, state \\ %{}) do
+    render(%{
+      runtime
+      | program: %Program{},
+        store: state,
+        pristine: MapSet.new(),
+        finished?: false,
+        field_errors: %{},
+        queries: %{},
+        mutations: %{},
+        runs: %{}
+    })
+  end
+
   @doc "Marks the end of the stream: every query runs."
   @spec finish(t()) :: {t(), [effect()]}
   def finish(%__MODULE__{} = runtime), do: sync_queries(%{runtime | finished?: true})
@@ -144,16 +164,20 @@ defmodule OpenUI.Runtime do
   The error list to send to the host, only when it changed since the last
   call (language.md, section 8.3). While a stream is open nothing is
   reported, and a list left from an earlier stream is cleared with `[]`.
+  `renderer_errors` are errors the host's renderer adds, such as a component
+  that raised.
   """
-  @spec take_errors(t()) :: {t(), :unchanged | {:changed, [Error.t()]}}
-  def take_errors(%__MODULE__{finished?: false, emitted_errors: []} = runtime),
+  @spec take_errors(t(), [Error.t()]) :: {t(), :unchanged | {:changed, [Error.t()]}}
+  def take_errors(runtime, renderer_errors \\ [])
+
+  def take_errors(%__MODULE__{finished?: false, emitted_errors: []} = runtime, _renderer_errors),
     do: {runtime, :unchanged}
 
-  def take_errors(%__MODULE__{finished?: false} = runtime),
+  def take_errors(%__MODULE__{finished?: false} = runtime, _renderer_errors),
     do: {%{runtime | emitted_errors: []}, {:changed, []}}
 
-  def take_errors(%__MODULE__{} = runtime) do
-    current = current_errors(runtime)
+  def take_errors(%__MODULE__{} = runtime, renderer_errors) do
+    current = current_errors(runtime) ++ renderer_errors
 
     if current == runtime.emitted_errors,
       do: {runtime, :unchanged},
@@ -380,13 +404,26 @@ defmodule OpenUI.Runtime do
     end
   end
 
+  @doc """
+  The current value of a field element: its bound `$variable`, or its entry
+  in the form or page state.
+  """
+  @spec field_value(t(), String.t()) :: term()
+  def field_value(%__MODULE__{} = runtime, key) do
+    case Map.fetch(runtime.elements, key) do
+      {:ok, element} -> field_value(runtime, key, element)
+      :error -> nil
+    end
+  end
+
   defp field_value(runtime, key, element) do
     case bound_state(element) do
       %Binding{name: name} ->
         runtime.store |> Map.get(name) |> unwrap()
 
       nil ->
-        name = element.props[Keyword.fetch!(runtime.fields[element.type], :name)]
+        name =
+          element.props[runtime.fields |> Map.get(element.type, []) |> Keyword.get(:name, "name")]
 
         fields =
           if form = form_name(runtime, key), do: form_fields(runtime, form), else: runtime.store
