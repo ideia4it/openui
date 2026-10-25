@@ -53,7 +53,7 @@ defmodule OpenUI.Runtime.Evaluator do
     value
   end
 
-  defp env(ctx), do: %{ctx: ctx, scope: %{}, owner: nil}
+  defp env(ctx), do: %{ctx: ctx, owner: nil}
 
   defp element(%Element{} = element, env, errors) do
     component = Library.component(env.ctx.library, element.type)
@@ -186,12 +186,11 @@ defmodule OpenUI.Runtime.Evaluator do
 
   defp interpret(value, _env, errors), do: {value, errors}
 
-  # A reference left after lowering is a loop variable, or the array of an
-  # @Each named like its own loop variable, which the official renderer
-  # resolves to a mutation result, then to a query result.
+  # Loop variables are substituted before evaluation, so the only reference
+  # left is the array of an @Each named like its own loop variable, which the
+  # official renderer resolves to a mutation result, then to a query result.
   defp resolve_ref(name, env) do
-    with :error <- Map.fetch(env.scope, name),
-         :error <- Map.fetch(env.ctx.mutations, name),
+    with :error <- Map.fetch(env.ctx.mutations, name),
          :error <- Map.fetch(env.ctx.queries, name) do
       nil
     else
@@ -336,7 +335,7 @@ defmodule OpenUI.Runtime.Evaluator do
         Enum.map_reduce(items, errors, fn item, errors ->
           template
           |> substitute(name, item)
-          |> interpret(%{env | scope: Map.put(env.scope, name, item)}, errors)
+          |> interpret(env, errors)
         end)
 
       _other ->
