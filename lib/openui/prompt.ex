@@ -133,8 +133,7 @@ defmodule OpenUI.Prompt do
       String.contains?(component.signature, "ActionExpression") or
         Regex.match?(@restricted_slot, component.signature)
 
-  defp line(signature, ""), do: signature
-  defp line(signature, nil), do: signature
+  defp line(signature, description) when description in [nil, ""], do: signature
   defp line(signature, description), do: signature <> @separator <> description
 
   defp function_line(signature, description), do: line("@" <> signature, description)
