@@ -5,7 +5,7 @@ defmodule OpenUI.Library.DSLTest do
 
   test "generates the same LibrarySpec as the official library for the same catalog" do
     golden = "test/fixtures/goldens/example.spec.json" |> File.read!() |> OpenUI.JSON.decode!()
-    ours = OpenUI.Library.to_spec(OpenUI.Test.ExampleLibrary)
+    ours = OpenUI.Library.to_spec(compile_example_library())
 
     assert comparable(ours) == comparable(golden)
     assert Enum.sort(property_orders(ours)) == Enum.sort(property_orders(golden))
@@ -36,6 +36,55 @@ defmodule OpenUI.Library.DSLTest do
         use OpenUI.Library
         component "Card", description: "x", props: []
         group "Charts", ["Pie"]
+      end
+      """)
+    end
+
+    assert_raise CompileError, ~r/action copy must start with an uppercase letter/, fn ->
+      Code.compile_string(~S"""
+      defmodule LowercaseAction do
+        use OpenUI.Library
+        action "copy", description: "x", params: []
+      end
+      """)
+    end
+  end
+
+  test "refuses a prop without a type, or one that refers to a component or action it lacks" do
+    assert_raise CompileError, ~r/Card.title has no type/, fn ->
+      Code.compile_string(~S"""
+      defmodule UntypedProp do
+        use OpenUI.Library
+        component "Card", description: "x", props: [title: [required: true]]
+      end
+      """)
+    end
+
+    assert_raise CompileError, ~r/Board.items refers to Tile, which is not a component/, fn ->
+      Code.compile_string(~S"""
+      defmodule MissingComponent do
+        use OpenUI.Library
+        component "Board", description: "x", props: [items: [type: {:array, {:ref, "Tile"}}]]
+      end
+      """)
+    end
+
+    assert_raise CompileError, ~r/Button.share refers to Print, which is not an action/, fn ->
+      Code.compile_string(~S"""
+      defmodule MissingAction do
+        use OpenUI.Library
+        component "Button", description: "x", props: [share: [type: {:actions, ["Print"]}]]
+      end
+      """)
+    end
+  end
+
+  test "refuses a function whose impl is not a remote capture" do
+    assert_raise CompileError, ~r"Percent: impl must be a remote capture like &Mod.fun/1", fn ->
+      Code.compile_string(~S"""
+      defmodule AnonymousImpl do
+        use OpenUI.Library
+        function "Percent", description: "x", params: [], returns: :string, impl: fn _args -> "0%" end
       end
       """)
     end
@@ -101,6 +150,18 @@ defmodule OpenUI.Library.DSLTest do
                  props: [title: [type: :string], footer: [type: :string, required: true, default: ""]]
              end
              """)
+  end
+
+  # test/support compiles before cover starts, so the example catalog is
+  # compiled again here, under another name, for cover to see the DSL build it.
+  defp compile_example_library do
+    {:defmodule, meta, [_name, body]} =
+      "test/support/example_library.ex" |> File.read!() |> Code.string_to_quoted!()
+
+    [{module, _binary}] =
+      Code.compile_quoted({:defmodule, meta, [OpenUI.Library.DSLTest.ExampleLibrary, body]})
+
+    module
   end
 
   defp comparable(spec) do
