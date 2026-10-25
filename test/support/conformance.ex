@@ -26,6 +26,22 @@ defmodule OpenUI.Conformance do
         do: id <> "+interactions"
   end
 
+  @doc "Cases whose program text is in input.oui or chunks.json."
+  def program_inputs_ids do
+    for id <- program_case_ids(),
+        files = files(id),
+        Map.has_key?(files, "input.oui") or Map.has_key?(files, "chunks.json"),
+        do: id
+  end
+
+  @doc "The program text of a case, with chunks joined."
+  def input_text(id) do
+    case files(id) do
+      %{"input.oui" => input} -> input
+      %{"chunks.json" => chunks} -> chunks |> JSON.decode!() |> Enum.join()
+    end
+  end
+
   @doc "The key of the first element in the tree that came from `statement_id`."
   def key_of(nil, _statement_id), do: nil
   def key_of(%OpenUI.Element{statement_id: statement_id, key: key}, statement_id), do: key
