@@ -216,7 +216,7 @@ defmodule OpenUI.Library.Schema do
       Enum.map_join(fields, ", ", fn {field, opts} -> param_signature(field, opts, names) end)
 
     signature = "#{name}(#{params})"
-    if returns, do: signature <> " → " <> annotation(returns, names), else: signature
+    if returns, do: signature <> " \u2192 " <> annotation(returns, names), else: signature
   end
 
   # A prop with a default counts as optional, like Zod's `.default()`.
