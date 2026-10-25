@@ -37,7 +37,7 @@ defmodule OpenUI.Runtime.Value do
   def to_number(false), do: 0
 
   def to_number(string) when is_binary(string) do
-    case string_to_number(string) do
+    case parse_number(string) do
       :nan -> 0
       number -> number
     end
@@ -77,7 +77,7 @@ defmodule OpenUI.Runtime.Value do
   def loose_equal?(left, right) when is_boolean(right), do: loose_equal?(left, to_number(right))
 
   def loose_equal?(left, right) when is_number(left) and is_binary(right),
-    do: string_to_number(right) == left
+    do: parse_number(right) == left
 
   def loose_equal?(left, right) when is_binary(left) and is_number(right),
     do: loose_equal?(right, left)
@@ -129,7 +129,12 @@ defmodule OpenUI.Runtime.Value do
 
   @decimal ~r/^([+-]?)(?:(\d+)\.?(\d*)|\.(\d+))(?:[eE]([+-]?\d+))?$/
 
-  defp string_to_number(string) do
+  @doc """
+  StringToNumber: the number a string reads as, or `:nan`. Leading and
+  trailing whitespace is ignored and the empty string is 0.
+  """
+  @spec parse_number(String.t()) :: number() | :nan
+  def parse_number(string) when is_binary(string) do
     trimmed = String.trim(string)
 
     cond do
