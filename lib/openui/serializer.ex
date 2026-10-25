@@ -127,32 +127,15 @@ defmodule OpenUI.Serializer do
   defp precedence_of({:unary, _op, _operand}), do: @unary_precedence
   defp precedence_of(_ast), do: 10
 
-  defp element_expression(%Element{} = element, library, statements) do
-    case Library.component(library, element.type) do
-      nil ->
-        positional(element.type, Map.values(element.props), [], library, statements)
-
-      component ->
-        positional(
-          element.type,
-          Enum.map(component.props, &element.props[&1.name]),
-          component.props,
-          library,
-          statements
-        )
-    end
-  end
-
-  defp positional(name, values, params, library, statements) do
-    {args, statements} = Enum.map_reduce(values, statements, &value(&1, library, &2))
-    {"#{name}(#{args |> trim_optional_nulls(params) |> Enum.join(", ")})", statements}
+  defp element_expression(%Element{type: type, props: props}, library, statements) do
+    params = Library.component(library, type).props
+    {args, statements} = Enum.map_reduce(params, statements, &value(props[&1.name], library, &2))
+    {"#{type}(#{args |> trim_optional_nulls(params) |> Enum.join(", ")})", statements}
   end
 
   defp trim_optional_nulls(args, params) do
-    required = params |> Enum.take(length(args)) |> Enum.map(& &1.required?)
-
     args
-    |> Enum.zip(required ++ List.duplicate(false, length(args) - length(required)))
+    |> Enum.zip(Enum.map(params, & &1.required?))
     |> Enum.reverse()
     |> Enum.drop_while(fn {arg, required?} -> arg == "null" and not required? end)
     |> Enum.reverse()
