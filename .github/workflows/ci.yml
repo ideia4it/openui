@@ -37,7 +37,7 @@ jobs:
       - run: mix credo --strict
       - run: mix test
 
-  no-optional-deps:
+  without-liveview:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,10 +46,7 @@ jobs:
           elixir-version: "1.19"
           otp-version: "28"
           version-type: loose
-      - run: mix deps.get
-      - run: mix compile --no-optional-deps --warnings-as-errors
-        env:
-          MIX_BUILD_PATH: _build/no_optional
+      - run: bash scripts/check-without-liveview.sh
 
   dialyzer:
     runs-on: ubuntu-latest
