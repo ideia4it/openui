@@ -4,9 +4,9 @@ defmodule OpenUI.Runtime.HostValue do
   values programs work with.
 
   Atom keys and atoms become strings (except `true`, `false` and `nil`),
-  tuples become lists, a struct that implements `String.Chars` becomes its
-  string (Decimal, Date, DateTime, as Jason would encode them), any other
-  struct becomes a map, bytes that are not UTF-8 become U+FFFD, and values
+  tuples become lists, dates and times become ISO 8601 strings as `JSON`
+  writes them, any other struct that implements `String.Chars` becomes its
+  string (Decimal, as Jason would encode it), any other struct becomes a map, bytes that are not UTF-8 become U+FFFD, and values
   JSON cannot hold (pids, functions, references, ports) become `nil`.
   """
 
@@ -20,6 +20,9 @@ defmodule OpenUI.Runtime.HostValue do
   def normalize(value) when is_atom(value), do: Atom.to_string(value)
   def normalize(value) when is_list(value), do: Enum.map(value, &normalize/1)
   def normalize(value) when is_tuple(value), do: value |> Tuple.to_list() |> normalize()
+
+  def normalize(%DateTime{} = value), do: DateTime.to_iso8601(value)
+  def normalize(%NaiveDateTime{} = value), do: NaiveDateTime.to_iso8601(value)
 
   def normalize(%_{} = struct) do
     if String.Chars.impl_for(struct),
