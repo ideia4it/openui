@@ -17,6 +17,58 @@ defmodule OpenUI.PromptTest do
     end
   end
 
+  defmodule UndescribedCatalog do
+    use OpenUI.Library, id: "undescribed", version: "1.0.0", root: "Stack"
+
+    component "Stack", props: [children: [type: {:array, :component}, required: true]]
+  end
+
+  defmodule ActionWithoutButtonCatalog do
+    use OpenUI.Library, id: "action-without-button", version: "1.0.0", root: "Stack"
+
+    component "Stack",
+      description: "A column",
+      props: [children: [type: {:array, :component}, required: true]]
+
+    action "Notify",
+      description: "Tells the support team",
+      params: [message: [type: :string, required: true]]
+  end
+
+  # The expected texts below were checked byte for byte against
+  # generateSystemPrompt of @openuidev/lang-core 1.0.1.
+
+  test "generates the default prompt when called without options" do
+    assert OpenUI.Prompt.generate(OpenUI.Test.ExampleLibrary) ==
+             File.read!("test/fixtures/goldens/example-default.prompt.txt")
+  end
+
+  test "lists a component without a description by its signature alone, with no function or action section" do
+    assert OpenUI.Prompt.generate(UndescribedCatalog) =~
+             "streaming.\n\nStack(children: any[])\n\n## Hoisting & Streaming (CRITICAL)"
+  end
+
+  test "teaches custom actions in a section of their own when no prop takes an action" do
+    assert OpenUI.Prompt.generate(ActionWithoutButtonCatalog) =~
+             """
+             Stack(children: any[]) \u2014 A column
+
+             ## Action \u2014 Button Behavior
+
+             Pass one step, or Action([...]) with several steps, as a button's action.
+
+             Available steps:
+             - @Notify(message: string) \u2014 Tells the support team
+
+             ## Hoisting\
+             """
+  end
+
+  test "lists tools given only by name, with no default shapes for their results" do
+    assert OpenUI.Prompt.generate(OpenUI.Test.ExampleLibrary, tools: ["listTickets"]) =~
+             "\n\n- listTickets\n\nCRITICAL: Use ONLY the tools listed above"
+  end
+
   defp library_for(golden_case) do
     case Object.get(golden_case, "library") do
       "fixtures" -> OpenUI.Conformance.library()
