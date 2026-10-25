@@ -10,6 +10,15 @@ defmodule OpenUI.LiveViewTest do
     assert render(view) =~ "Hello"
   end
 
+  test "keeps a character the stream cut between two updates whole" do
+    <<first_byte, _rest::binary>> = "é"
+    view = mount_program(~s|root = Stack([Text("caf| <> <<first_byte>>, streaming: true)
+    send(view.pid, {:set_response, ~s|root = Stack([Text("café")])|, false})
+
+    assert render(view) =~ "café"
+    refute render(view) =~ "�"
+  end
+
   test "typing into a bound field updates the page and tells the host" do
     view =
       mount_program(~S"""

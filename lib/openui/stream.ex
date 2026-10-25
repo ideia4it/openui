@@ -61,9 +61,12 @@ defmodule OpenUI.Stream do
     %{stream | buffer: text, held: "", final: Parser.parse(text, stream.library)}
   end
 
-  @doc "The text accepted so far."
-  @spec text(t()) :: String.t()
-  def text(%__MODULE__{buffer: buffer}), do: buffer
+  @doc """
+  The text received so far, including the bytes held back from a character
+  the last chunk cut, so a caller can take the next chunk as what comes after it.
+  """
+  @spec text(t()) :: binary()
+  def text(%__MODULE__{buffer: buffer, held: held}), do: buffer <> held
 
   @doc "True once `finish/1` ran."
   @spec finished?(t()) :: boolean()
