@@ -29,14 +29,45 @@ defmodule OpenUI.Conformance do
   def pending?(id), do: MapSet.member?(@pending, id)
 
   @doc "Runs one case; returns the list of differences, empty when it passes."
-  def run(id) do
-    files = files(id)
+  def run(id), do: id |> files() |> run_case(id)
+
+  defp run_case(%{"chunks.json" => chunks} = files, _id) do
     expected = JSON.decode!(files["expected.json"])
+    chunks = JSON.decode!(chunks)
 
-    actual =
-      OpenUI.Canonical.result(OpenUI.Parser.parse(files["input.oui"], library()), library())
+    streamed =
+      chunks
+      |> Enum.reduce(OpenUI.Stream.new(library()), &OpenUI.Stream.push(&2, &1))
+      |> OpenUI.Stream.finish()
+      |> OpenUI.Stream.program()
 
-    diff(expected, actual)
+    batch = OpenUI.Parser.parse(Enum.join(chunks), library())
+
+    Enum.map(diff(expected, OpenUI.Canonical.result(streamed, library())), &("streamed " <> &1)) ++
+      Enum.map(diff(expected, OpenUI.Canonical.result(batch, library())), &("batch " <> &1))
+  end
+
+  defp run_case(%{"input.oui" => input, "expected.json" => expected}, id) do
+    expected = JSON.decode!(expected)
+    program = OpenUI.Parser.parse(input, library())
+
+    diff(expected, OpenUI.Canonical.result(program, library())) ++
+      roundtrip(id, expected, program)
+  end
+
+  # *-roundtrip-* cases also serialize the rendered tree and parse it again.
+  defp roundtrip(id, expected, program) do
+    with true <- String.contains?(id, "-roundtrip-"),
+         %OpenUI.Element{} = tree <- OpenUI.Canonical.tree(program, library()) do
+      text = OpenUI.Serializer.to_source(tree, library(), state: %{})
+      again = OpenUI.Canonical.result(OpenUI.Parser.parse(text, library()), library())["root"]
+
+      if again == expected["root"],
+        do: [],
+        else: ["roundtrip: #{inspect(text)} parses to #{inspect(again)}"]
+    else
+      _not_a_roundtrip_case -> []
+    end
   end
 
   def diff(expected, actual) do

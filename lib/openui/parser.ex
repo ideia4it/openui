@@ -64,7 +64,9 @@ defmodule OpenUI.Parser do
     * `:final` (default `true`): the stream has ended, so `no-root` is
       reported and enum checks run;
     * `:incomplete` (default `false`): the text ended inside a string or a
-      bracket.
+      bracket;
+    * `:ignore_state` (default `[]`): state names not to declare yet, such as
+      a `$name` still growing at the end of a stream.
   """
   @spec build([Statement.t()], Library.t() | module(), keyword()) :: Program.t()
   def build(statements, library, opts \\ []) do
@@ -84,7 +86,9 @@ defmodule OpenUI.Parser do
 
     ctx = Materializer.new(library, symbols, unreached, entry_id, incomplete? or not final?)
     {root, root_expression, ctx} = materialize_entry(entry, symbols, ctx)
-    {state, queries, mutations, ctx} = extract(statements, ctx)
+
+    {state, queries, mutations, ctx} =
+      extract(statements, Keyword.get(opts, :ignore_state, []), ctx)
 
     ctx =
       if final?,
@@ -146,7 +150,7 @@ defmodule OpenUI.Parser do
     end
   end
 
-  defp extract(statements, ctx) do
+  defp extract(statements, ignored_state, ctx) do
     {declared, queries, mutations, ctx} =
       Enum.reduce(statements, {[], [], [], ctx}, fn statement, acc ->
         extract_one(statement, acc)
@@ -158,7 +162,7 @@ defmodule OpenUI.Parser do
       statements
       |> Enum.flat_map(&state_refs(&1.ast))
       |> Enum.uniq()
-      |> Enum.reject(&MapSet.member?(declared_names, &1))
+      |> Enum.reject(&(MapSet.member?(declared_names, &1) or &1 in ignored_state))
       |> Enum.map(&{&1, nil})
 
     {Enum.reverse(declared) ++ auto_declared, Enum.reverse(queries), Enum.reverse(mutations), ctx}

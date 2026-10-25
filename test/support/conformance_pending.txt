@@ -4,7 +4,3 @@ editing/003-state-delete
 editing/005-fenced-patch
 editing/006-no-root-statement-no-gc
 state/005-validation-rules
-streaming/001-worked-example
-streaming/003-multiline-ternary-across-chunks
-streaming/005-fence-arrives-late
-streaming/006-truncated-string-escape
