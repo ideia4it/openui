@@ -52,7 +52,7 @@ defmodule OpenUI.MixProject do
         "GitHub" => @source_url,
         "OpenUI spec" => "https://github.com/thesysdev/openui/tree/main/spec"
       },
-      files: ~w(lib mix.exs README.md CHANGELOG.md LICENSE NOTICE)
+      files: ~w(lib mix.exs .formatter.exs README.md CHANGELOG.md LICENSE NOTICE)
     ]
   end
 

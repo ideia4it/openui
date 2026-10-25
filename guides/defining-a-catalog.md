@@ -38,6 +38,8 @@ defmodule MyApp.Library do
 end
 ```
 
+Add `import_deps: [:openui]` to your `.formatter.exs` so `mix format` keeps `component`, `function`, `action` and `group` without parentheses.
+
 ## Prop options
 
 - `type:` (required), see below.
