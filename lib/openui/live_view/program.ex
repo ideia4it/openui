@@ -15,7 +15,14 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
 
     @impl true
     def mount(socket) do
-      {:ok, assign(socket, runtime: nil, stream: nil, html: {:safe, ""}, renderer_errors: [])}
+      {:ok,
+       assign(socket,
+         runtime: nil,
+         stream: nil,
+         html: {:safe, ""},
+         renderer_errors: [],
+         refresh_timers: %{}
+       )}
     end
 
     @impl true
@@ -144,7 +151,10 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
         socket
       else
         runtime = Runtime.restart(socket.assigns.runtime, restored_state(message.context))
-        assign(socket, runtime: runtime, stream: ProgramStream.new(library(socket)))
+
+        socket
+        |> cancel_refresh_timers()
+        |> assign(runtime: runtime, stream: ProgramStream.new(library(socket)))
       end
     end
 
@@ -216,14 +226,33 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
       start_async(socket, {:openui_mutation, run_ref}, fn -> call_tool(provider, tool, args) end)
     end
 
+    # Every result of a refreshing query schedules the next refresh, so the
+    # pending one is replaced: one timer per query, as the official renderer keeps.
     defp run_effect({:schedule_refresh, query_id, seconds}, socket) do
-      send_update_after(
-        __MODULE__,
-        [id: socket.assigns.id, openui_refresh: query_id],
-        round(seconds * 1000)
-      )
+      socket = cancel_refresh_timer(socket, query_id)
 
-      socket
+      timer =
+        send_update_after(
+          __MODULE__,
+          [id: socket.assigns.id, openui_refresh: query_id],
+          round(seconds * 1000)
+        )
+
+      assign(socket, :refresh_timers, Map.put(socket.assigns.refresh_timers, query_id, timer))
+    end
+
+    defp cancel_refresh_timer(socket, query_id) do
+      {timer, timers} = Map.pop(socket.assigns.refresh_timers, query_id)
+      if timer, do: Process.cancel_timer(timer)
+      assign(socket, :refresh_timers, timers)
+    end
+
+    defp cancel_refresh_timers(socket) do
+      Enum.each(socket.assigns.refresh_timers, fn {_query_id, timer} ->
+        Process.cancel_timer(timer)
+      end)
+
+      assign(socket, :refresh_timers, %{})
     end
 
     defp refresh(socket, query_id) do
