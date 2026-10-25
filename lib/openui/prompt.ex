@@ -501,16 +501,17 @@ defmodule OpenUI.Prompt do
   defp schema_object(nil), do: nil
   defp schema_object(json) when is_binary(json), do: JSON.decode!(json)
   defp schema_object(%Object{} = object), do: object
+  defp schema_object(map) when is_map(map), do: ordered(map)
 
-  defp schema_object(map) when is_map(map),
+  defp ordered(map) when is_map(map) and not is_struct(map),
     do:
       map
       |> Enum.sort()
-      |> Enum.map(fn {key, value} -> {to_string(key), schema_object(value)} end)
+      |> Enum.map(fn {key, value} -> {to_string(key), ordered(value)} end)
       |> JSON.object()
 
-  defp schema_object(list) when is_list(list), do: Enum.map(list, &schema_object/1)
-  defp schema_object(value), do: value
+  defp ordered(list) when is_list(list), do: Enum.map(list, &ordered/1)
+  defp ordered(value), do: value
 
   defp tool_signature(tool) do
     args =

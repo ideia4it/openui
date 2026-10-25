@@ -69,6 +69,52 @@ defmodule OpenUI.PromptTest do
              "\n\n- listTickets\n\nCRITICAL: Use ONLY the tools listed above"
   end
 
+  test "describes each JSON Schema type a tool takes or returns, from JSON text or a plain map" do
+    search_tickets = %{
+      name: "searchTickets",
+      description: "Finds tickets",
+      input_schema:
+        ~s|{"type": "object", "properties": {"query": {"type": "string"}, "open": {"type": "boolean"}, "tags": {"type": "array", "items": {"type": "string"}}, "ids": {"type": "array"}, "filter": {"type": "object"}, "extra": {}}, "required": ["query"]}|,
+      output_schema: %{
+        type: "object",
+        properties: %{
+          total: %{type: "integer"},
+          more: %{type: "boolean"},
+          rows: %{
+            type: "array",
+            items: %{type: "object", properties: %{title: %{type: "string"}}, required: ["title"]}
+          },
+          summary: %{type: "string", enum: ["ok", "partial"]},
+          cursor: %{}
+        }
+      }
+    }
+
+    ping = %{name: "ping", output_schema: %{"type" => "string"}}
+
+    close_ticket = %{
+      name: "closeTicket",
+      input_schema: %{type: "object", properties: %{id: %{type: "number"}}, required: ["id"]}
+    }
+
+    assert OpenUI.Prompt.generate(OpenUI.Test.ExampleLibrary,
+             tools: ["listTickets", search_tickets, ping, close_ticket]
+           ) =~
+             """
+             - listTickets
+             - searchTickets(query: string, open?: boolean, tags?: string[], ids?: any[], filter?: object, extra?: any) \u2192 {cursor?: any, more?: boolean, rows?: {title: string}[], summary?: "ok" | "partial", total?: number}
+               Finds tickets
+             - ping() \u2192 string
+             - closeTicket(id: number)
+
+             ### Default values for Query results
+
+             Use these shapes as minimal Query defaults:
+             - searchTickets: `{"cursor":null,"more":false,"rows":[],"summary":"","total":0}`
+             - ping: `""`
+             """
+  end
+
   defp library_for(golden_case) do
     case Object.get(golden_case, "library") do
       "fixtures" -> OpenUI.Conformance.library()
