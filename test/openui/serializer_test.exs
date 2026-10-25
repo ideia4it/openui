@@ -52,4 +52,14 @@ defmodule OpenUI.SerializerTest do
     assert OpenUI.Serializer.expression({:unary, "-", {:binary, "+", {:ref, "a"}, {:ref, "b"}}}) ==
              "-(a + b)"
   end
+
+  test "writes a component that an @Each item hands to @Set, in its catalog order" do
+    library = OpenUI.Library.resolve(OpenUI.Test.ExampleLibrary)
+
+    source =
+      ~s|root = Stack(@Each([Card("Billing"), Card("Shipping")], "c", Button("Show", @Set($panel, c))))|
+
+    assert OpenUI.Serializer.to_source(tree(source, library), library) ==
+             ~s|root = Stack([Button("Show", @Set($panel, Card("Billing"))), Button("Show", @Set($panel, Card("Shipping")))])|
+  end
 end
