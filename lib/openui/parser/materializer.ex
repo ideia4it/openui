@@ -66,7 +66,7 @@ defmodule OpenUI.Parser.Materializer do
 
   def value({:call, name, args}, ctx) do
     if runtime_call?(name, ctx.library),
-      do: call(name, args, ctx, MapSet.new()),
+      do: call(name, args, ctx, %{}),
       else: {nil, Validator.issue(ctx, name, "", "unknown-function")}
   end
 
@@ -83,10 +83,12 @@ defmodule OpenUI.Parser.Materializer do
   def value(ast, ctx), do: expression(ast, ctx)
 
   @doc "Lowers an expression the evaluator will run: references are inlined, calls checked."
-  def expression(ast, ctx), do: expression(ast, ctx, MapSet.new())
+  # The iterator names in scope are a plain map, not a MapSet: OTP 28 dialyzer
+  # loses MapSet opacity through this recursion.
+  def expression(ast, ctx), do: expression(ast, ctx, %{})
 
   defp expression({:ref, name} = ast, ctx, scoped) do
-    if MapSet.member?(scoped, name), do: {ast, ctx}, else: resolve_ref(name, ctx, :expr)
+    if Map.has_key?(scoped, name), do: {ast, ctx}, else: resolve_ref(name, ctx, :expr)
   end
 
   defp expression({:call, name, args}, ctx, scoped) do
@@ -244,7 +246,7 @@ defmodule OpenUI.Parser.Materializer do
         call_args("Each", [array, iterator, template | rest], ctx, scoped)
 
       name ->
-        inner = MapSet.put(scoped, name)
+        inner = Map.put(scoped, name, true)
         {[array, template | rest], ctx} = expressions([array, template | rest], ctx, inner)
         {{:call, "Each", [array, iterator, template | rest]}, ctx}
     end
