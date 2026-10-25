@@ -114,7 +114,12 @@ defmodule OpenUI.Library.Schema do
       ]
 
       returns = Keyword.get(opts, :returns)
-      pairs = if returns?, do: pairs ++ [{"returns", type_schema(returns, names)}], else: pairs
+
+      pairs =
+        if returns? and returns != nil,
+          do: pairs ++ [{"returns", type_schema(returns, names)}],
+          else: pairs
+
       {name, JSON.object(pairs)}
     end)
     |> JSON.object()
@@ -203,6 +208,7 @@ defmodule OpenUI.Library.Schema do
     do: JSON.object([{"anyOf", Enum.map(names.components, &ref/1)}])
 
   defp type_schema(:action, _names), do: ref("ActionExpression")
+  defp type_schema({:actions, [action]}, _names), do: ref(action)
 
   defp type_schema({:actions, actions}, _names),
     do: JSON.object([{"anyOf", Enum.map(actions, &ref/1)}])
@@ -254,7 +260,7 @@ defmodule OpenUI.Library.Schema do
   defp annotation({:binding, type}, names), do: "$binding<#{annotation(type, names)}>"
 
   defp union?({:one_of, _types}), do: true
-  defp union?({:actions, _actions}), do: true
+  defp union?({:actions, [_action, _other | _rest]}), do: true
   defp union?(_type), do: false
 
   # The JSON shapes of the built-in action objects, as the official library

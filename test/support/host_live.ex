@@ -11,7 +11,8 @@ defmodule OpenUI.Test.HostLive do
        response: session["response"],
        streaming: session["streaming"],
        tools: OpenUI.LiveCase.tools(session["tools_id"]),
-       components: session["components"]
+       components: session["components"],
+       unknown_slot?: session["unknown_slot"]
      )}
   end
 
@@ -24,7 +25,7 @@ defmodule OpenUI.Test.HostLive do
       tool_provider={@tools}
       streaming={@streaming}
     >
-      <:unknown :let={error}><p class="unknown">{error.code}</p></:unknown>
+      <:unknown :if={@unknown_slot?} :let={error}><p class="unknown">{error.code}</p></:unknown>
     </OpenUI.LiveView.renderer>
     """
   end

@@ -21,7 +21,8 @@ defmodule OpenUI.LiveCase do
       "response" => response,
       "streaming" => Keyword.get(opts, :streaming, false),
       "tools_id" => register_tools(Keyword.get(opts, :tools)),
-      "components" => Keyword.get(opts, :components, OpenUI.Test.ExampleUI)
+      "components" => Keyword.get(opts, :components, OpenUI.Test.ExampleUI),
+      "unknown_slot" => Keyword.get(opts, :unknown_slot, true)
     }
 
     {:ok, view, _html} =

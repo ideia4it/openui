@@ -22,6 +22,12 @@ defmodule OpenUI.Library.CompatTest do
     assert Compat.check(old, new) == []
   end
 
+  test "leaves out a component the new version drops, since the rules only cover props" do
+    old = spec(%{"Card" => [{"title", true}], "Badge" => [{"label", true}]})
+    new = spec(%{"Card" => [{"title", true}]})
+    assert Compat.check(old, new) == []
+  end
+
   test "finds nothing to report between a library and itself, actions included" do
     spec = OpenUI.Library.to_spec(OpenUI.Test.ExampleLibrary)
     reread = spec |> JSON.encode!(pretty: true) |> JSON.decode!()

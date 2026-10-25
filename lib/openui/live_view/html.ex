@@ -36,10 +36,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp render_value(%Unknown{} = unknown, ctx, errors),
       do: {render_unknown(unknown, ctx), errors}
 
-    defp render_value(list, ctx, errors) when is_list(list) do
-      {items, errors} = Enum.map_reduce(list, errors, &render_value(&1, ctx, &2))
-      {Enum.reject(items, &is_nil/1), errors}
-    end
+    # A list prop is data, where a position means a row or a point: a null
+    # keeps its place, as in the props the official renderer passes on.
+    defp render_value(list, ctx, errors) when is_list(list),
+      do: Enum.map_reduce(list, errors, &render_value(&1, ctx, &2))
 
     defp render_value(value, _ctx, errors), do: {value, errors}
 

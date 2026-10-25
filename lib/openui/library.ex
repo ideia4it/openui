@@ -223,7 +223,6 @@ defmodule OpenUI.Library do
   defp ref_name(_ref), do: nil
 
   # A spec may leave any section out; read a missing one as an empty object.
-  defp field(nil, _key), do: %Object{}
   defp field(%Object{} = object, key), do: Object.get(object, key) || %Object{}
 
   defp keys(%Object{} = object), do: Object.keys(object)
