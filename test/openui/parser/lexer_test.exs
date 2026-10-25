@@ -16,6 +16,21 @@ defmodule OpenUI.Parser.LexerTest do
     assert Enum.take(Lexer.tokenize("{a: 1} -2"), -2) == [{:op, "}"}, {:number, -2}]
   end
 
+  test "reads a minus after a call or an index as subtraction" do
+    assert Lexer.tokenize("@Sum(prices) -5") ==
+             [{:at, "Sum"}, {:op, "("}, {:ident, "prices"}, {:op, ")"}, {:op, "-"}, {:number, 5}]
+
+    assert Enum.take(Lexer.tokenize("items[0] -1"), -2) == [{:op, "-"}, {:number, 1}]
+  end
+
+  test "reads a signed exponent, and a number too large for a float as zero" do
+    assert Lexer.tokenize("1.5e-3 2E+2 1e999") == [
+             {:number, 0.0015},
+             {:number, 200},
+             {:number, 0}
+           ]
+  end
+
   test "never fails: skips unknown characters and keeps a dot after a number as member access" do
     assert Lexer.tokenize("a;b") == [{:ident, "a"}, {:ident, "b"}]
     assert Lexer.tokenize("1.") == [{:number, 1}, {:op, "."}]
@@ -24,10 +39,16 @@ defmodule OpenUI.Parser.LexerTest do
   end
 
   test "decodes both string quotes and flags an unterminated one" do
-    assert Lexer.tokenize(~S|"q\"d\\b\ttA" 'it\'s' 'x\ny'|) ==
-             [{:string, "q\"d\\b\ttA"}, {:string, "it's"}, {:string, "x\ny"}]
+    assert Lexer.tokenize(~S|"q\"d\\b\ttA" 'it\'s' 'x\ny' 'a\tb'|) ==
+             [{:string, "q\"d\\b\ttA"}, {:string, "it's"}, {:string, "x\ny"}, {:string, "a\tb"}]
 
     assert Lexer.tokenize(~S|"abc|) == [{:string, "abc", :unterminated}]
+  end
+
+  test "keeps the text of a string cut off at the end, even right after a backslash" do
+    assert Lexer.tokenize("'abc") == [{:string, "abc", :unterminated}]
+    assert Lexer.tokenize("\"abc\\") == [{:string, "abc\\", :unterminated}]
+    assert Lexer.tokenize("'abc\\") == [{:string, "abc", :unterminated}]
   end
 
   test "reads names, calls, keywords and the short logical operators" do

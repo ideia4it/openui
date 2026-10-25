@@ -48,7 +48,6 @@ defmodule OpenUI.Parser.Materializer do
   def value({:number, number}, ctx), do: {number, ctx}
   def value({:boolean, boolean}, ctx), do: {boolean, ctx}
   def value(:null, ctx), do: {nil, ctx}
-  def value({:unresolved, _name}, ctx), do: {nil, ctx}
   def value({:array, items}, ctx), do: array_value(items, ctx)
 
   def value({:object, entries}, ctx) do
@@ -167,15 +166,11 @@ defmodule OpenUI.Parser.Materializer do
   # marker for the renderer's diagnostic.
   defp array_value(items, ctx) do
     {kept, ctx} =
-      Enum.reduce(items, {[], ctx}, fn
-        {:unresolved, _name}, acc ->
-          acc
-
-        item, {kept, ctx} ->
-          case value(item, ctx) do
-            {nil, ctx} when elem(item, 0) in [:component, :call, :ref] -> {kept, ctx}
-            {value, ctx} -> {[value | kept], ctx}
-          end
+      Enum.reduce(items, {[], ctx}, fn item, {kept, ctx} ->
+        case value(item, ctx) do
+          {nil, ctx} when elem(item, 0) in [:component, :call, :ref] -> {kept, ctx}
+          {value, ctx} -> {[value | kept], ctx}
+        end
       end)
 
     {Enum.reverse(kept), ctx}

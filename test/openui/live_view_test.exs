@@ -57,6 +57,24 @@ defmodule OpenUI.LiveViewTest do
     refute_receive {:openui, "p", {:state, _state}}
   end
 
+  test "a field that sends several values keeps them all" do
+    view =
+      mount_program(
+        ~S|root = Stack([Select("tags", [SelectItem("bug", "Bug"), SelectItem("ui", "UI")])])|
+      )
+
+    view
+    |> element("#program-p form")
+    |> render_change(%{
+      "_target" => ["openui", "0.children.0"],
+      "openui" => %{"0.children.0" => ["bug", "ui"]}
+    })
+
+    assert_receive {:openui, "p",
+                    {:state,
+                     %{"tags" => %{"value" => ["bug", "ui"], "componentType" => "select"}}}}
+  end
+
   test "a button sends its event to the host with the form state" do
     view =
       mount_program(~S"""
@@ -95,6 +113,25 @@ defmodule OpenUI.LiveViewTest do
       "]]>openui:content\nroot = Stack([Text(\"ok\")])\n]]>openui:context\n{not json\n]]>openui:end"
 
     assert render(mount_program(broken)) =~ "ok"
+  end
+
+  test "reopening a message whose context is the state itself restores it" do
+    stored =
+      OpenUI.Message.build(
+        content: ~s|$q = ""\nroot = Stack([Text("Saved: " + $q)])|,
+        context: %{"$q" => "rush"},
+        end: true
+      )
+
+    assert render(mount_program(stored)) =~ "Saved: rush"
+  end
+
+  test "leaves an unknown component out when the host gives no unknown slot" do
+    view = mount_program(~S|root = Stack([Text("kept"), Pie(1)])|, unknown_slot: false)
+
+    assert_receive {:openui, "p", {:errors, [%OpenUI.Error{code: "unknown-component"}]}}
+    assert render(view) =~ "kept"
+    refute has_element?(view, "#program-p div.stack > :nth-child(2)")
   end
 
   test "reports errors when they change and an empty list after recovery" do

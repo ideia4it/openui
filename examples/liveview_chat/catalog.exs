@@ -215,6 +215,7 @@ defmodule Support.UI do
   defp number(value) when is_float(value) and value == trunc(value), do: trunc(value)
   defp number(value), do: value
 
+  defp cell(nil), do: ""
   defp cell(value) when is_binary(value) or is_number(value), do: number(value)
   defp cell(value), do: JSON.encode!(value)
 end

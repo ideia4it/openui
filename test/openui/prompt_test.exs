@@ -17,6 +17,104 @@ defmodule OpenUI.PromptTest do
     end
   end
 
+  defmodule UndescribedCatalog do
+    use OpenUI.Library, id: "undescribed", version: "1.0.0", root: "Stack"
+
+    component "Stack", props: [children: [type: {:array, :component}, required: true]]
+  end
+
+  defmodule ActionWithoutButtonCatalog do
+    use OpenUI.Library, id: "action-without-button", version: "1.0.0", root: "Stack"
+
+    component "Stack",
+      description: "A column",
+      props: [children: [type: {:array, :component}, required: true]]
+
+    action "Notify",
+      description: "Tells the support team",
+      params: [message: [type: :string, required: true]]
+  end
+
+  # The expected texts below were checked byte for byte against
+  # generateSystemPrompt of @openuidev/lang-core 1.0.1.
+
+  test "generates the default prompt when called without options" do
+    assert OpenUI.Prompt.generate(OpenUI.Test.ExampleLibrary) ==
+             File.read!("test/fixtures/goldens/example-default.prompt.txt")
+  end
+
+  test "lists a component without a description by its signature alone, with no function or action section" do
+    assert OpenUI.Prompt.generate(UndescribedCatalog) =~
+             "streaming.\n\nStack(children: any[])\n\n## Hoisting & Streaming (CRITICAL)"
+  end
+
+  test "teaches custom actions in a section of their own when no prop takes an action" do
+    assert OpenUI.Prompt.generate(ActionWithoutButtonCatalog) =~
+             """
+             Stack(children: any[]) \u2014 A column
+
+             ## Action \u2014 Button Behavior
+
+             Pass one step, or Action([...]) with several steps, as a button's action.
+
+             Available steps:
+             - @Notify(message: string) \u2014 Tells the support team
+
+             ## Hoisting\
+             """
+  end
+
+  test "lists tools given only by name, with no default shapes for their results" do
+    assert OpenUI.Prompt.generate(OpenUI.Test.ExampleLibrary, tools: ["listTickets"]) =~
+             "\n\n- listTickets\n\nCRITICAL: Use ONLY the tools listed above"
+  end
+
+  test "describes each JSON Schema type a tool takes or returns, from JSON text or a plain map" do
+    search_tickets = %{
+      name: "searchTickets",
+      description: "Finds tickets",
+      input_schema:
+        ~s|{"type": "object", "properties": {"query": {"type": "string"}, "open": {"type": "boolean"}, "tags": {"type": "array", "items": {"type": "string"}}, "ids": {"type": "array"}, "filter": {"type": "object"}, "extra": {}}, "required": ["query"]}|,
+      output_schema: %{
+        type: "object",
+        properties: %{
+          total: %{type: "integer"},
+          more: %{type: "boolean"},
+          rows: %{
+            type: "array",
+            items: %{type: "object", properties: %{title: %{type: "string"}}, required: ["title"]}
+          },
+          summary: %{type: "string", enum: ["ok", "partial"]},
+          cursor: %{}
+        }
+      }
+    }
+
+    ping = %{name: "ping", output_schema: %{"type" => "string"}}
+
+    close_ticket = %{
+      name: "closeTicket",
+      input_schema: %{type: "object", properties: %{id: %{type: "number"}}, required: ["id"]}
+    }
+
+    assert OpenUI.Prompt.generate(OpenUI.Test.ExampleLibrary,
+             tools: ["listTickets", search_tickets, ping, close_ticket]
+           ) =~
+             """
+             - listTickets
+             - searchTickets(query: string, open?: boolean, tags?: string[], ids?: any[], filter?: object, extra?: any) \u2192 {cursor?: any, more?: boolean, rows?: {title: string}[], summary?: "ok" | "partial", total?: number}
+               Finds tickets
+             - ping() \u2192 string
+             - closeTicket(id: number)
+
+             ### Default values for Query results
+
+             Use these shapes as minimal Query defaults:
+             - searchTickets: `{"cursor":null,"more":false,"rows":[],"summary":"","total":0}`
+             - ping: `""`
+             """
+  end
+
   defp library_for(golden_case) do
     case Object.get(golden_case, "library") do
       "fixtures" -> OpenUI.Conformance.library()

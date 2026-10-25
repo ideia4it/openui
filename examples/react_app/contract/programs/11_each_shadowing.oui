@@ -1,0 +1,3 @@
+rows = [{t: "a"}, {t: "b"}]
+tickets = Query("list_tickets", {}, [{title: "Loading"}, {title: "Later"}])
+root = Stack([Stack(@Each(rows, "rows", Text(rows.t))), Stack(@Each(tickets, "tickets", Text(tickets.title)))])

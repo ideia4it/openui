@@ -37,11 +37,23 @@ defmodule OpenUI.Parser.ExpressionTest do
     assert parse("m.0.1") == {:member, {:ref, "m"}, "0.1"}
     assert parse("m[0][1]") == {:index, {:index, {:ref, "m"}, {:number, 0}}, {:number, 1}}
     assert parse("Count(x)") == {:ref, "Count"}
+    assert parse("@Count") == {:ref, "Count"}
 
     assert parse("Action([@Set($a, 1)])") ==
              {:call, "Action", [{:array, [{:call, "Set", [{:state, "$a"}, {:number, 1}]}]}]}
 
     assert parse("foo.bar(x)") == {:member, {:ref, "foo"}, "bar"}
+  end
+
+  test "assumes the closer of a string, a key or a member cut off at the end" do
+    assert parse(~S|Text("Hel|) == {:component, "Text", [{:string, "Hel"}]}
+    assert parse(~S|{"na|) == {:object, [{"na", :null}]}
+    assert parse("data.") == {:member, {:ref, "data"}, "?"}
+  end
+
+  test "reads a stray token as null in an operand and as \"?\" in a key" do
+    assert parse("Stack(])") == {:component, "Stack", [:null]}
+    assert parse("{true: 1}") == {:object, [{"?", {:number, 1}}]}
   end
 
   test "classifies statements by their right side" do

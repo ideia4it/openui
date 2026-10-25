@@ -225,13 +225,15 @@ defmodule OpenUI.Message do
 
   defp read_attributes(""), do: %{}
 
+  # Readers decode like URLSearchParams: an unencoded @, or a % that starts
+  # no escape, reads as written.
   defp read_attributes(query) do
     for pair <- String.split(query, "&"),
         [key | value] = String.split(pair, "=", parts: 2),
-        key = decode(key),
+        key = URI.decode_www_form(key),
         key != "",
         into: %{},
-        do: {key, decode(List.first(value, ""))}
+        do: {key, URI.decode_www_form(List.first(value, ""))}
   end
 
   # The bytes of URLSearchParams: encodeURIComponent with !'()~ escaped too,
@@ -240,12 +242,5 @@ defmodule OpenUI.Message do
     string
     |> URI.encode(&(&1 in ?a..?z or &1 in ?A..?Z or &1 in ?0..?9 or &1 in [?-, ?_, ?., ?*]))
     |> String.replace("%20", "+")
-  end
-
-  # Readers decode the same way and accept an unencoded @.
-  defp decode(string) do
-    URI.decode_www_form(string)
-  rescue
-    ArgumentError -> string
   end
 end

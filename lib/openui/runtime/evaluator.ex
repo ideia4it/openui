@@ -53,7 +53,7 @@ defmodule OpenUI.Runtime.Evaluator do
     value
   end
 
-  defp env(ctx), do: %{ctx: ctx, scope: %{}, owner: nil}
+  defp env(ctx), do: %{ctx: ctx, owner: nil}
 
   defp element(%Element{} = element, env, errors) do
     component = Library.component(env.ctx.library, element.type)
@@ -67,8 +67,6 @@ defmodule OpenUI.Runtime.Evaluator do
 
     {%{element | props: props}, errors}
   end
-
-  defp bindable?(nil, _name), do: false
 
   defp bindable?(component, name),
     do: Enum.any?(component.props, &(&1.name == name and &1.bindable?))
@@ -104,7 +102,7 @@ defmodule OpenUI.Runtime.Evaluator do
   defp interpret({:literal, value}, _env, errors), do: {value, errors}
   defp interpret({:state, name}, env, errors), do: {Map.get(env.ctx.state, name), errors}
   defp interpret({:assign, name, _value}, env, errors), do: {Map.get(env.ctx.state, name), errors}
-  defp interpret({:ref, name}, env, errors), do: {Map.get(env.scope, name), errors}
+  defp interpret({:ref, name}, env, errors), do: {resolve_ref(name, env), errors}
 
   defp interpret({:runtime_ref, id, :query}, env, errors),
     do: {Map.get(env.ctx.queries, id), errors}
@@ -178,7 +176,27 @@ defmodule OpenUI.Runtime.Evaluator do
   end
 
   defp interpret(%Element{} = value, env, errors), do: element(value, env, errors)
+
+  # A materialized value, such as a $variable default, keeps the calls inside
+  # its lists and objects; it evaluates like the literal it came from.
+  defp interpret(list, env, errors) when is_list(list), do: interpret({:array, list}, env, errors)
+
+  defp interpret(map, env, errors) when is_map(map) and not is_struct(map),
+    do: interpret({:object, Map.to_list(map)}, env, errors)
+
   defp interpret(value, _env, errors), do: {value, errors}
+
+  # Loop variables are substituted before evaluation, so the only reference
+  # left is the array of an @Each named like its own loop variable, which the
+  # official renderer resolves to a mutation result, then to a query result.
+  defp resolve_ref(name, env) do
+    with :error <- Map.fetch(env.ctx.mutations, name),
+         :error <- Map.fetch(env.ctx.queries, name) do
+      nil
+    else
+      {:ok, value} -> value
+    end
+  end
 
   # Inside an array, an unresolved reference and an unknown component leave no
   # hole, in computed expressions too (language.md, section 8.4).
@@ -213,10 +231,8 @@ defmodule OpenUI.Runtime.Evaluator do
   defp member_of_item(item, field) when is_map(item) and not is_struct(item),
     do: Map.get(item, field)
 
-  # Arrays are objects in JavaScript: an inner array answers "length" and its
-  # numeric keys, so m.0 plucks the first item of every row.
-  defp member_of_item(list, "length") when is_list(list), do: length(list)
-
+  # Arrays are objects in JavaScript: an inner array answers its numeric keys,
+  # so m.0 plucks the first item of every row.
   defp member_of_item(list, field) when is_list(list) do
     case Integer.parse(field) do
       {position, ""} when position >= 0 -> Enum.at(list, position)
@@ -290,9 +306,6 @@ defmodule OpenUI.Runtime.Evaluator do
 
       action = Library.action(env.ctx.library, name) ->
         custom_action(action, args, env, errors)
-
-      true ->
-        {nil, errors}
     end
   end
 
@@ -322,7 +335,7 @@ defmodule OpenUI.Runtime.Evaluator do
         Enum.map_reduce(items, errors, fn item, errors ->
           template
           |> substitute(name, item)
-          |> interpret(%{env | scope: Map.put(env.scope, name, item)}, errors)
+          |> interpret(env, errors)
         end)
 
       _other ->

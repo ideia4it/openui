@@ -1,6 +1,8 @@
 defmodule OpenUI.LibraryTest do
   use ExUnit.Case, async: true
 
+  alias OpenUI.Library.Rules
+
   setup do
     {:ok, library} =
       OpenUI.Library.from_spec(File.read!(Path.join(OpenUI.Conformance.root(), "library.json")))
@@ -54,5 +56,116 @@ defmodule OpenUI.LibraryTest do
     assert "component Query uses a reserved name" in problems
     assert "Query: required prop b comes after an optional prop" in problems
     assert "root Missing is not a component" in problems
+  end
+
+  test "refuses text that is not a LibrarySpec object" do
+    assert OpenUI.Library.from_spec(~S|["Stack"]|) ==
+             {:error, ["a LibrarySpec must be a JSON object"]}
+
+    assert {:error, ["invalid JSON: " <> _reason]} = OpenUI.Library.from_spec(~S|{"root": |)
+  end
+
+  test "refuses a library.json whose sections have the wrong type, naming each one" do
+    assert OpenUI.Library.from_spec(~S|{"schema": 5}|) == {:error, ["schema must be an object"]}
+
+    spec = ~S"""
+    {"components": {"Card": {"signature": 3, "description": "A card"}},
+     "functions": [],
+     "actions": "none",
+     "componentGroups": {"name": "Layout"},
+     "root": 1,
+     "schema": {"properties": [],
+                "$defs": {"Card": {"properties": {"title": "string"}, "required": "title"}},
+                "functions": {"Percent": {"description": 7, "params": []}},
+                "actions": {"Copy": "text"}}}
+    """
+
+    assert {:error, problems} = OpenUI.Library.from_spec(spec)
+
+    assert Enum.sort(problems) == [
+             "actions must be an object",
+             "componentGroups must be a list",
+             "components.Card.signature must be a string",
+             "functions must be an object",
+             "root must be a string",
+             "schema.$defs.Card.properties.title must be an object",
+             "schema.$defs.Card.required must be a list",
+             "schema.actions.Copy must be an object",
+             "schema.functions.Percent.description must be a string",
+             "schema.functions.Percent.params must be an object",
+             "schema.properties must be an object"
+           ]
+  end
+
+  test "refuses a component group or a group entry of the wrong type" do
+    spec = ~S"""
+    {"components": {"Card": {"signature": "Card()"}},
+     "componentGroups": [{"name": "Layout", "components": ["Card", 2], "notes": "short"}, "Charts"]}
+    """
+
+    assert {:error, problems} = OpenUI.Library.from_spec(spec)
+
+    assert Enum.sort(problems) == [
+             "componentGroups[0].components[1] must be a string",
+             "componentGroups[0].notes must be a list",
+             "componentGroups[1] must be an object"
+           ]
+  end
+
+  test "reads a section left null as a missing one" do
+    spec = ~S"""
+    {"components": {"Card": {"signature": null, "description": null}, "Tag": null},
+     "componentGroups": [{"name": "Layout", "components": null, "notes": null}],
+     "schema": {"properties": {"Tag": {"$ref": "#/$defs/Tag"}},
+                "$defs": {"Card": {"properties": null, "required": null},
+                          "Tag": {"properties": {"label": null}}},
+                "functions": null}}
+    """
+
+    assert {:ok, library} = OpenUI.Library.from_spec(spec)
+
+    assert %{description: "", signature: "", props: []} =
+             OpenUI.Library.component(library, "Card")
+
+    assert [%{name: "label", schema: %{}, kind: :value}] =
+             OpenUI.Library.component(library, "Tag").props
+
+    assert [%{name: "Layout", components: [], notes: []}] = library.groups
+  end
+
+  test "refuses every name the language reserves, built-ins included" do
+    reserved = Rules.reserved_names()
+
+    named_by_the_spec =
+      ["Query", "Mutation", "Action" | OpenUI.Builtins.functions() ++ OpenUI.Builtins.steps()]
+
+    assert named_by_the_spec -- reserved == []
+
+    for name <- reserved do
+      spec = ~s"""
+      {"schema": {"properties": {"#{name}": {"$ref": "#/$defs/#{name}"}},
+                  "$defs": {"#{name}": {"type": "object", "properties": {}}}}}
+      """
+
+      assert OpenUI.Library.from_spec(spec) ==
+               {:error, ["component #{name} uses a reserved name"]}
+    end
+  end
+
+  test "reads a prop that refers to a schema outside the spec as a plain value" do
+    spec = ~S"""
+    {"schema": {"properties": {"Price": {"$ref": "#/$defs/Price"}},
+                "$defs": {"Price": {"type": "object",
+                                    "properties": {"amount": {"$ref": "https://example.com/money.json"}}}}}}
+    """
+
+    {:ok, library} = OpenUI.Library.from_spec(spec)
+
+    assert [%{name: "amount", kind: :value}] = OpenUI.Library.component(library, "Price").props
+  end
+
+  test "shows only its id, version and root when inspected", %{library: library} do
+    assert inspect(library) ==
+             ~s(#OpenUI.Library<id: "fixtures", version: "1.0.0", root: "Stack", ...>)
   end
 end
