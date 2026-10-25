@@ -102,7 +102,7 @@ defmodule OpenUI.Runtime.Evaluator do
   defp interpret({:literal, value}, _env, errors), do: {value, errors}
   defp interpret({:state, name}, env, errors), do: {Map.get(env.ctx.state, name), errors}
   defp interpret({:assign, name, _value}, env, errors), do: {Map.get(env.ctx.state, name), errors}
-  defp interpret({:ref, name}, env, errors), do: {Map.get(env.scope, name), errors}
+  defp interpret({:ref, name}, env, errors), do: {resolve_ref(name, env), errors}
 
   defp interpret({:runtime_ref, id, :query}, env, errors),
     do: {Map.get(env.ctx.queries, id), errors}
@@ -176,7 +176,21 @@ defmodule OpenUI.Runtime.Evaluator do
   end
 
   defp interpret(%Element{} = value, env, errors), do: element(value, env, errors)
+
   defp interpret(value, _env, errors), do: {value, errors}
+
+  # A reference left after lowering is a loop variable, or the array of an
+  # @Each named like its own loop variable, which the official renderer
+  # resolves to a mutation result, then to a query result.
+  defp resolve_ref(name, env) do
+    with :error <- Map.fetch(env.scope, name),
+         :error <- Map.fetch(env.ctx.mutations, name),
+         :error <- Map.fetch(env.ctx.queries, name) do
+      nil
+    else
+      {:ok, value} -> value
+    end
+  end
 
   # Inside an array, an unresolved reference and an unknown component leave no
   # hole, in computed expressions too (language.md, section 8.4).

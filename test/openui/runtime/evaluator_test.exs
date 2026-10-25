@@ -159,6 +159,17 @@ defmodule OpenUI.Runtime.EvaluatorTest do
     assert actions == [{"x", "a"}, {"y", "a"}, {"z", "b"}]
   end
 
+  test "renders no children for an @Each whose array names its own loop variable, like the official renderer" do
+    # The official materializer (lang-core materializeLazyBuiltin) also reads the array inside the loop scope.
+    root =
+      render(~S"""
+      root = Stack(@Each(rows, "rows", Text(rows.t)))
+      rows = [{t: "a"}, {t: "b"}]
+      """)
+
+    assert root["props"]["children"] == []
+  end
+
   test "reads a bare name as the @Each loop variable" do
     root =
       render(~S"""

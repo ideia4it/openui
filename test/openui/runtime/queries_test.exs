@@ -233,4 +233,41 @@ defmodule OpenUI.Runtime.QueriesTest do
 
     assert {_runtime, []} = OpenUI.Runtime.mutation_result(runtime, run_ref, {:ok, %{}})
   end
+
+  test "loops over a query named like its own @Each loop variable, as the official renderer does" do
+    runtime =
+      start(~S"""
+      root = Stack(@Each(tickets, "tickets", Text(tickets.title)))
+      tickets = Query("list", {}, [{title: "Loading"}])
+      """)
+
+    assert texts(runtime) == ["Loading"]
+
+    {runtime, []} =
+      OpenUI.Runtime.query_result(
+        runtime,
+        "tickets",
+        %{},
+        {:ok, [%{"title" => "Leak"}, %{"title" => "Noise"}]}
+      )
+
+    assert texts(runtime) == ["Leak", "Noise"]
+  end
+
+  test "loops over a mutation result named like its own @Each loop variable, as the official renderer does" do
+    runtime =
+      start(~S"""
+      root = Stack([save, Card("Saved", @Each(saved.data, "saved", Text(saved)))])
+      saved = Mutation("create", {})
+      save = Button("Save", @Run(saved))
+      """)
+
+    {runtime, [{:run_mutation, run_ref, "create", %{}}]} =
+      OpenUI.Runtime.trigger(runtime, key_of(runtime, "save"), "action")
+
+    {runtime, []} = OpenUI.Runtime.mutation_result(runtime, run_ref, {:ok, ["Ana", "Bia"]})
+
+    %OpenUI.Element{props: %{"children" => [_save, card]}} = OpenUI.Runtime.tree(runtime)
+    assert Enum.map(card.props["children"], & &1.props["text"]) == ["Ana", "Bia"]
+  end
 end
