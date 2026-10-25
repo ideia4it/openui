@@ -523,12 +523,9 @@ defmodule OpenUI.Runtime do
     fetch_all(runtime, changed)
   end
 
-  defp deps_changed?(runtime, query, state) do
-    case Map.get(runtime.queries, query.id) do
-      %{deps: deps} -> Map.take(state, query.deps) != deps
-      nil -> false
-    end
-  end
+  # Once the stream ends every query has been fetched, so each has an entry.
+  defp deps_changed?(runtime, query, state),
+    do: Map.take(state, query.deps) != Map.fetch!(runtime.queries, query.id).deps
 
   defp fetch_all(runtime, queries) do
     Enum.reduce(queries, {runtime, []}, fn query, {runtime, effects} ->

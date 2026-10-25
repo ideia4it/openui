@@ -3,6 +3,10 @@ defmodule OpenUI.Runtime.HostValueTest do
 
   alias OpenUI.Runtime.HostValue
 
+  defmodule Client do
+    defstruct [:name, :visits]
+  end
+
   test "replaces bytes that are not UTF-8 in tool text" do
     assert HostValue.normalize(%{"name" => "caf" <> <<195>>}) == %{"name" => "caf\uFFFD"}
   end
@@ -33,6 +37,18 @@ defmodule OpenUI.Runtime.HostValueTest do
              "pair" => [1, 2],
              "owner" => nil,
              "nested" => [%{"ok" => true, "none" => nil}]
+           }
+  end
+
+  test "turns a struct with no text form into a map and every map key into text" do
+    assert HostValue.normalize(%{
+             client: %Client{name: "Ana", visits: 3},
+             by_year: %{2025 => 10, 2026 => 12},
+             by_month: %{{2026, 9} => 4, {2026, 10} => 5}
+           }) == %{
+             "client" => %{"name" => "Ana", "visits" => 3},
+             "by_year" => %{"2025" => 10, "2026" => 12},
+             "by_month" => %{"2026,9" => 4, "2026,10" => 5}
            }
   end
 end

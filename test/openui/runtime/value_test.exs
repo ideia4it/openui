@@ -4,15 +4,19 @@ defmodule OpenUI.Runtime.ValueTest do
   alias OpenUI.Runtime.{Collation, Value}
 
   test "converts to numbers like ToNumber and never produces NaN" do
-    assert Enum.map(["5", " 12 ", "0x1F", ".5", "1e3", "", "abc", "12abc"], &Value.to_number/1) ==
-             [5, 12, 31, 0.5, 1000, 0, 0, 0]
+    assert Enum.map(
+             ["5", " 12 ", "0x1F", ".5", "1e3", "", "abc", "12abc", "1e400"],
+             &Value.to_number/1
+           ) == [5, 12, 31, 0.5, 1000, 0, 0, 0, 0]
+
+    assert Value.parse_number("1e400") == :nan
 
     assert Enum.map([true, false, nil, [1], %{}], &Value.to_number/1) == [1, 0, 0, 0, 0]
   end
 
   test "formats numbers like Number::toString" do
     assert Enum.map(
-             [2, 3.0, 0.1 + 0.2, 1.0e21, 1.0e20, 1.0e-7, 1.0e-6, -0.0, 123.456],
+             [2, 3.0, 0.1 + 0.2, 1.0e21, 1.5e21, 1.0e20, 1.0e-7, 1.0e-6, -0.0, 123.456, -1.5],
              &Value.stringify/1
            ) ==
              [
@@ -20,12 +24,24 @@ defmodule OpenUI.Runtime.ValueTest do
                "3",
                "0.30000000000000004",
                "1e+21",
+               "1.5e+21",
                "100000000000000000000",
                "1e-7",
                "0.000001",
                "0",
-               "123.456"
+               "123.456",
+               "-1.5"
              ]
+  end
+
+  test "converts values to text like String()" do
+    assert Enum.map([nil, true, false, [1, nil, "a", [2, 3]], %{"a" => 1}], &Value.stringify/1) ==
+             ["null", "true", "false", "1,,a,2,3", "[object Object]"]
+  end
+
+  test "keeps integers within 2^53 and makes larger results floats" do
+    assert Value.binary_op("*", 4_503_599_627_370_496, 2) === 9_007_199_254_740_992
+    assert Value.binary_op("*", 9_007_199_254_740_992, 2) === 18_014_398_509_481_984.0
   end
 
   test "applies the operators of section 3.2" do
@@ -37,6 +53,9 @@ defmodule OpenUI.Runtime.ValueTest do
     assert Value.binary_op("%", 7, 0) == 0
     assert Value.binary_op("/", 7, 2) == 3.5
     assert Value.binary_op("%", -7, 3) == -1
+    assert Value.binary_op("%", 7.5, 2) == 1.5
+    assert Value.binary_op("!=", 1, "1") == false
+    assert Value.binary_op("<", "2", 10) and Value.binary_op("<=", 2, "2")
     assert Value.binary_op(">=", 3, "3")
     assert Value.binary_op("||", nil, "fallback") == "fallback"
     assert Value.binary_op("&&", 0, "no") == 0
@@ -46,8 +65,16 @@ defmodule OpenUI.Runtime.ValueTest do
              Value.loose_equal?(nil, nil)
 
     refute Value.loose_equal?(nil, 0)
-    refute Value.truthy?("") or Value.truthy?(0) or Value.truthy?(nil)
+    refute Value.truthy?("") or Value.truthy?(0) or Value.truthy?(0.0) or Value.truthy?(nil)
     assert Value.truthy?([]) and Value.truthy?(%{}) and Value.truthy?("0")
+  end
+
+  test "compares loosely like ==, and arrays and objects by structure" do
+    assert Value.loose_equal?(true, 1) and Value.loose_equal?("1", true)
+    assert Value.loose_equal?([1, 2], "1,2") and Value.loose_equal?(1, [1])
+    assert Value.loose_equal?(%{"a" => [1]}, %{"a" => [1]})
+    refute Value.loose_equal?(0, nil) or Value.loose_equal?(false, "x")
+    refute Value.loose_equal?([1], [2])
   end
 
   test "compares text cut inside a multibyte character without raising" do
