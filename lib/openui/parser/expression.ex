@@ -34,7 +34,7 @@ defmodule OpenUI.Parser.Expression do
 
   # Built-in functions and steps need the @. Written bare before a paren they
   # read as a reference and lose their arguments; only Action works bare.
-  @builtin_names ~w(Count First Last Sum Avg Min Max Sort Filter Round Abs Floor Ceil Each Run ToAssistant OpenUrl Set Reset)
+  @builtin_names OpenUI.Builtins.names() -- ["Action"]
 
   @precedence %{
     "?" => 1,

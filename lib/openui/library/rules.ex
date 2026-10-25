@@ -5,7 +5,7 @@ defmodule OpenUI.Library.Rules do
 
   alias OpenUI.Library
 
-  @reserved ~w(Query Mutation Action Count First Last Sum Avg Min Max Filter Sort Round Abs Floor Ceil Each Set Reset Run ToAssistant OpenUrl)
+  @reserved ["Query", "Mutation" | OpenUI.Builtins.names()]
 
   @doc "Names no component, function or action may use."
   @spec reserved_names() :: [String.t()]

@@ -14,6 +14,15 @@ defmodule OpenUI.Conformance do
     |> Enum.sort()
   end
 
+  def library do
+    {:ok, library} =
+      OpenUI.Library.from_spec(File.read!(Path.join(@root, "library.json")),
+        functions: %{"Upper" => fn %{"text" => text} -> String.upcase(text) end}
+      )
+
+    library
+  end
+
   def files(id) do
     dir = Path.join(@root, id)
 
