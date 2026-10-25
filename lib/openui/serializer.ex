@@ -205,13 +205,8 @@ defmodule OpenUI.Serializer do
   defp step({:run, statement_id, _kind}, _library), do: "@Run(#{statement_id})"
 
   defp step({:custom, name, params}, library) do
-    keys =
-      case library && Library.action(library, name) do
-        nil -> params |> Map.keys() |> Enum.sort()
-        action -> Enum.map(action.params, & &1.name)
-      end
-
-    args = Enum.map_join(keys, ", ", &(params |> Map.get(&1) |> value(library, []) |> elem(0)))
+    action = Library.action(library, name)
+    args = Enum.map_join(action.params, ", ", &(params[&1.name] |> value(library, []) |> elem(0)))
     "@#{name}(#{args})"
   end
 end
