@@ -9,8 +9,9 @@ defmodule Mix.Tasks.Openui.Gen.Spec do
 
   With `--check` nothing is written. The task fails when the new spec would
   break programs stored with the old one (a prop moved or removed, a new
-  required prop without a default) or when the file is out of date. Run it
-  in CI so the file never drifts from the module.
+  required prop without a default), when the file is out of date, or when it
+  is not a valid LibrarySpec. Run it in CI so the file never drifts from the
+  module.
   """
 
   use Mix.Task
@@ -52,20 +53,21 @@ defmodule Mix.Tasks.Openui.Gen.Spec do
   end
 
   defp check(out, spec, generated) do
-    current = if File.exists?(out), do: File.read!(out), else: ""
+    if File.exists?(out),
+      do: check_committed(out, File.read!(out), spec, generated),
+      else: up_to_date(out, "", generated)
+  end
 
-    case OpenUI.JSON.decode(current) do
-      {:ok, %OpenUI.JSON.Object{} = existing} ->
-        case Compat.check(existing, spec) do
-          [] ->
-            up_to_date(out, current, generated)
+  defp check_committed(out, current, spec, generated) do
+    with {:ok, committed} <- Library.from_spec(current),
+         [] <- Compat.check(Library.to_spec(committed), spec) do
+      up_to_date(out, current, generated)
+    else
+      {:error, problems} ->
+        Mix.raise("#{out} is not a valid LibrarySpec:\n" <> Enum.join(problems, "\n"))
 
-          problems ->
-            Mix.raise("#{out} would break stored programs:\n" <> Enum.join(problems, "\n"))
-        end
-
-      _not_a_spec ->
-        up_to_date(out, current, generated)
+      problems ->
+        Mix.raise("#{out} would break stored programs:\n" <> Enum.join(problems, "\n"))
     end
   end
 
