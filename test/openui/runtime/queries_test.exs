@@ -142,6 +142,67 @@ defmodule OpenUI.Runtime.QueriesTest do
              OpenUI.Runtime.finish(runtime)
   end
 
+  describe "query timing" do
+    defp streamed(text) do
+      library = OpenUI.Conformance.library()
+
+      library
+      |> OpenUI.Stream.new()
+      |> OpenUI.Stream.push(text)
+      |> OpenUI.Stream.program()
+    end
+
+    defp eager_runtime,
+      do: OpenUI.Runtime.new(OpenUI.Conformance.library(), queries: :on_statement)
+
+    test "runs a query as soon as its statement is complete while the stream is open" do
+      {_runtime, effects} =
+        OpenUI.Runtime.load(
+          eager_runtime(),
+          streamed(~s|t = Query("list", {status: "open"}, {rows: []})\nroot = Stack([|)
+        )
+
+      assert {:run_query, "t", "list", %{"status" => "open"}} in effects
+    end
+
+    test "does not run a query whose statement is still being written" do
+      {_runtime, effects} =
+        OpenUI.Runtime.load(eager_runtime(), streamed(~s|t = Query("list", {status: "op|))
+
+      refute Enum.any?(effects, &match?({:run_query, _, _, _}, &1))
+    end
+
+    test "does not run the query again at finish when its arguments did not change" do
+      {runtime, [_run]} =
+        OpenUI.Runtime.load(
+          eager_runtime(),
+          streamed(~s|t = Query("list", {status: "open"}, {rows: []})\nroot = Stack([|)
+        )
+
+      {runtime, _effects} =
+        OpenUI.Runtime.load(
+          runtime,
+          streamed(
+            ~s|t = Query("list", {status: "open"}, {rows: []})\nroot = Stack([Metric("n", @Count(t.rows))])\n|
+          )
+        )
+
+      {_runtime, effects} = OpenUI.Runtime.finish(runtime)
+      refute Enum.any?(effects, &match?({:run_query, "t", _, _}, &1))
+    end
+
+    test "runs the query again when a later statement changes its arguments" do
+      query = ~s|t = Query("list", {status: $status}, {rows: []})\n|
+
+      {runtime, _effects} = OpenUI.Runtime.load(eager_runtime(), streamed(query <> "root = "))
+
+      {_runtime, effects} =
+        OpenUI.Runtime.load(runtime, streamed(query <> ~s|$status = "closed"\nroot = |))
+
+      assert {:run_query, "t", "list", %{"status" => "closed"}} in effects
+    end
+  end
+
   test "asks for a query written without arguments, or without a tool, with empty ones" do
     library = OpenUI.Conformance.library()
 

@@ -40,6 +40,7 @@ defmodule OpenUI.Runtime do
     fields: %{},
     forms: %{},
     finished?: false,
+    query_timing: :on_finish,
     tree: nil,
     elements: %{},
     render_errors: [],
@@ -59,8 +60,11 @@ defmodule OpenUI.Runtime do
   @type t :: %__MODULE__{}
 
   @doc """
-  Starts a runtime. Options: `:fields`, `:forms` and `:state`, the state a
-  host persisted earlier, applied over the program's defaults.
+  Starts a runtime. Options: `:fields`, `:forms`, `:state`, the state a
+  host persisted earlier, applied over the program's defaults, and
+  `:queries`, when queries run: `:on_finish` (default) once the stream ends,
+  or `:on_statement` as soon as the statement holding each one is complete,
+  for hosts that answer queries from results they already hold.
   """
   @spec new(Library.t() | module(), keyword()) :: t()
   def new(library, opts \\ []) do
@@ -68,20 +72,27 @@ defmodule OpenUI.Runtime do
       library: Library.resolve(library),
       fields: Map.new(Keyword.get(opts, :fields, %{})),
       forms: Map.new(Keyword.get(opts, :forms, %{})),
-      store: Map.new(Keyword.get(opts, :state, %{}))
+      store: Map.new(Keyword.get(opts, :state, %{})),
+      query_timing: Keyword.get(opts, :queries, :on_finish)
     }
     |> render()
   end
 
   @doc """
   Loads a program, from a stream frame or an edit. Declared defaults apply to
-  state the person has not changed; no key is ever deleted. Nothing runs
-  until `finish/1`.
+  state the person has not changed; no key is ever deleted. Queries run at
+  `finish/1`, or here once their statement is complete when the runtime was
+  started with `queries: :on_statement`.
   """
   @spec load(t(), Program.t()) :: {t(), [effect()]}
   def load(%__MODULE__{} = runtime, %Program{} = program) do
     runtime = %{runtime | program: program} |> apply_defaults() |> render()
-    if runtime.finished?, do: sync_queries(runtime), else: {runtime, []}
+
+    cond do
+      runtime.finished? -> sync_queries(runtime)
+      runtime.query_timing == :on_statement -> sync_queries(runtime, complete_queries(program))
+      true -> {runtime, []}
+    end
   end
 
   @doc """
@@ -502,10 +513,19 @@ defmodule OpenUI.Runtime do
 
   # Queries run once the stream ends, and again on load when an edit changed
   # their tool or arguments.
-  defp sync_queries(runtime) do
+  defp sync_queries(runtime), do: sync_queries(runtime, runtime.program.queries)
+
+  defp sync_queries(runtime, queries) do
     ctx = context(runtime)
-    changed = Enum.reject(runtime.program.queries, &same_request?(runtime, &1, ctx))
+    changed = Enum.reject(queries, &same_request?(runtime, &1, ctx))
     fetch_all(runtime, changed)
+  end
+
+  # The stream closes a cut statement so it parses, so its arguments may still
+  # grow; only a complete statement asks for its tool.
+  defp complete_queries(program) do
+    pending = for %{pending?: true, id: id} <- program.statements, into: %{}, do: {id, true}
+    Enum.reject(program.queries, &Map.has_key?(pending, &1.id))
   end
 
   defp same_request?(runtime, query, ctx) do
