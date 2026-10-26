@@ -32,7 +32,10 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
 
     def update(assigns, socket) do
       socket =
-        assign(socket, Map.take(assigns, [:id, :components, :tool_provider, :class, :unknown]))
+        assign(
+          socket,
+          Map.take(assigns, [:id, :components, :tool_provider, :queries, :class, :unknown])
+        )
 
       {:ok, guarded(socket, &receive_response(&1, assigns.response, assigns.streaming))}
     end
@@ -154,7 +157,8 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
         Runtime.new(library,
           fields: components.__openui__(:fields),
           forms: components.__openui__(:forms),
-          state: restored_state(message.context)
+          state: restored_state(message.context),
+          queries: socket.assigns.queries
         )
 
       assign(socket, runtime: runtime, stream: ProgramStream.new(library))

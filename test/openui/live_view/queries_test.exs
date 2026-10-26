@@ -28,6 +28,36 @@ defmodule OpenUI.LiveView.QueriesTest do
     assert render_async(view) =~ ~s|data-value="2"|
   end
 
+  describe "queries while the model writes" do
+    defp reporting_tools do
+      test_pid = self()
+
+      %{
+        "list" => fn args ->
+          send(test_pid, {:tool_called, "list", args})
+          {:ok, %{"rows" => []}}
+        end
+      }
+    end
+
+    @half_written ~s|t = Query("list", {status: "open"}, {rows: []})\nroot = Stack([|
+
+    test "runs a query while the model is still writing when queries is on_statement" do
+      mount_program(@half_written,
+        tools: reporting_tools(),
+        streaming: true,
+        queries: :on_statement
+      )
+
+      assert_receive {:tool_called, "list", %{"status" => "open"}}
+    end
+
+    test "keeps waiting for the end of the stream without the option" do
+      mount_program(@half_written, tools: reporting_tools(), streaming: true)
+      refute_receive {:tool_called, _tool, _args}, 100
+    end
+  end
+
   test "keeps one refresh timer per query after its arguments change" do
     test_pid = self()
 

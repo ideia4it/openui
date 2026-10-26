@@ -16,7 +16,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `response` is the program, or a stored message with `]]>openui:` marker
     lines (`OpenUI.Message`). While `streaming` is true, pass the text
     accumulated so far; the renderer reads only what is new. Queries run when
-    `streaming` turns false.
+    `streaming` turns false, or, with `queries={:on_statement}`, as soon as the
+    statement holding each one is complete: for a `tool_provider` that answers
+    from results the host already holds.
 
     `components` is a module that uses `OpenUI.LiveView.Components`. Each of
     its function components receives:
@@ -60,6 +62,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:components, :atom, required: true)
     attr(:tool_provider, :any, default: nil)
     attr(:streaming, :boolean, default: false)
+    attr(:queries, :atom, default: :on_finish, values: [:on_finish, :on_statement])
     attr(:class, :string, default: nil)
     slot(:unknown)
 
@@ -73,6 +76,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         components={@components}
         tool_provider={@tool_provider}
         streaming={@streaming}
+        queries={@queries}
         class={@class}
         unknown={@unknown}
       />
