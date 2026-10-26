@@ -2,7 +2,7 @@
 
 ## 0.2.0
 
-- `OpenUI.Runtime.new/2` takes `queries: :on_statement` to run each query as soon as its statement is complete, instead of when the stream ends; the LiveView renderer exposes it as the `queries` attribute. The default is unchanged.
+- `OpenUI.Runtime.new/2` takes `queries: :on_statement` to run each query as soon as its statement and every statement it reads are complete, instead of when the stream ends; the LiveView renderer exposes it as the `queries` attribute. The default is unchanged.
 - The LiveView renderer takes a `host` map that every catalog component receives as `@host`.
 - `host` is now a reserved assign name: a catalog prop named `host` does not compile with `OpenUI.LiveView.Components`.
 

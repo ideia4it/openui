@@ -17,8 +17,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     lines (`OpenUI.Message`). While `streaming` is true, pass the text
     accumulated so far; the renderer reads only what is new. Queries run when
     `streaming` turns false, or, with `queries={:on_statement}`, as soon as the
-    statement holding each one is complete: for a `tool_provider` that answers
-    from results the host already holds.
+    statement holding each one and every statement it reads are complete: for
+    a `tool_provider` that answers from results the host already holds.
 
     `components` is a module that uses `OpenUI.LiveView.Components`. Each of
     its function components receives:

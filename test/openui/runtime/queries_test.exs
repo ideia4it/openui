@@ -191,15 +191,36 @@ defmodule OpenUI.Runtime.QueriesTest do
       refute Enum.any?(effects, &match?({:run_query, "t", _, _}, &1))
     end
 
-    test "runs the query again when a later statement changes its arguments" do
+    defp runs(effects), do: for({:run_query, "t", tool, args} <- effects, do: {tool, args})
+
+    defp runs_over(frames) do
+      {_runtime, args} =
+        Enum.reduce(frames, {eager_runtime(), []}, fn frame, {runtime, args} ->
+          {runtime, effects} = OpenUI.Runtime.load(runtime, streamed(frame))
+          {runtime, args ++ runs(effects)}
+        end)
+
+      args
+    end
+
+    test "waits for the state its arguments read to be fully written" do
       query = ~s|t = Query("list", {status: $status}, {rows: []})\n|
 
-      {runtime, _effects} = OpenUI.Runtime.load(eager_runtime(), streamed(query <> "root = "))
+      assert runs_over([query, query <> ~s|$status = "op|, query <> ~s|$status = "open"\n|]) ==
+               [{"list", %{"status" => "open"}}]
+    end
 
-      {_runtime, effects} =
-        OpenUI.Runtime.load(runtime, streamed(query <> ~s|$status = "closed"\nroot = |))
+    test "waits for a value its arguments read through another statement" do
+      query = ~s|t = Query("list", {who: f.owner}, {rows: []})\nf = {owner: s}\n|
 
-      assert {:run_query, "t", "list", %{"status" => "closed"}} in effects
+      assert runs_over([query <> ~s|s = "an|, query <> ~s|s = "ana"\n|]) ==
+               [{"list", %{"who" => "ana"}}]
+    end
+
+    test "waits for the tool name it reads" do
+      query = ~s|t = Query(name, {}, {rows: []})\n|
+
+      assert runs_over([query <> ~s|name = "li|, query <> ~s|name = "list"\n|]) == [{"list", %{}}]
     end
   end
 

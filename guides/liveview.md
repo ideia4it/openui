@@ -21,7 +21,7 @@
 | `components` | A module that uses `OpenUI.LiveView.Components`. |
 | `tool_provider` | Answers `Query` and `Mutation` (see below). Optional. |
 | `streaming` | `true` while the model is still writing. Queries run when it turns `false`, unless `queries` says otherwise. |
-| `queries` | When queries run: `:on_finish` (default), once the stream ends; or `:on_statement`, as soon as the statement holding each one is complete, for a `tool_provider` that answers from results you already hold. |
+| `queries` | When queries run: `:on_finish` (default), once the stream ends; or `:on_statement`, as soon as the statement holding each one and every statement it reads are complete, for a `tool_provider` that answers from results you already hold. A query that reads a `$variable` or value the model has not finished writing waits for it. |
 | `host` | A map every component receives as `@host`, for what your app knows and the program does not. A new map re-renders the program. Optional. |
 | `class` | Class of the wrapper element. |
 | `:unknown` slot | Shown where the model used a component the catalog does not have. Without it, nothing shows. |
@@ -108,7 +108,7 @@ def run("list_tickets", args), do: {:ok, MyApp.Tickets.list(args)}
 def run(_name, _args), do: {:error, {:tool_not_found, ["list_tickets"]}}
 ```
 
-Each call runs in its own task with `start_async`. A query runs when the stream ends (or, with `queries={:on_statement}`, as soon as its statement is complete) and again when a `$variable` written in its arguments changes; a result for arguments that changed meanwhile is dropped. A query with a refresh interval runs again on a timer. An exception in a tool becomes the query's or mutation's error; the page stays up.
+Each call runs in its own task with `start_async`. A query runs when the stream ends (or, with `queries={:on_statement}`, as soon as its statement and what it reads are complete) and again when a `$variable` written in its arguments changes; a result for arguments that changed meanwhile is dropped. A query with a refresh interval runs again on a timer. An exception in a tool becomes the query's or mutation's error; the page stays up.
 
 Results can be any Elixir data: atom keys, `Decimal`, `Date` and structs are turned into JSON-like values.
 
