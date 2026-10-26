@@ -58,6 +58,18 @@ defmodule OpenUI.LiveView.QueriesTest do
     end
   end
 
+  test "re-renders with the new host map" do
+    view =
+      mount_program(~s|root = Note("Open")|,
+        components: OpenUI.Test.HostUI,
+        host: %{unit: "tickets"}
+      )
+
+    assert render(view) =~ ~s|data-unit="tickets"|
+    send(view.pid, {:set_host, %{unit: "cases"}})
+    assert render(view) =~ ~s|data-unit="cases"|
+  end
+
   test "keeps one refresh timer per query after its arguments change" do
     test_pid = self()
 

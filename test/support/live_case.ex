@@ -23,7 +23,8 @@ defmodule OpenUI.LiveCase do
       "tools_id" => register_tools(Keyword.get(opts, :tools)),
       "components" => Keyword.get(opts, :components, OpenUI.Test.ExampleUI),
       "unknown_slot" => Keyword.get(opts, :unknown_slot, true),
-      "queries" => Keyword.get(opts, :queries, :on_finish)
+      "queries" => Keyword.get(opts, :queries, :on_finish),
+      "host" => Keyword.get(opts, :host, %{})
     }
 
     {:ok, view, _html} =

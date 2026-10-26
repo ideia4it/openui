@@ -13,7 +13,8 @@ defmodule OpenUI.Test.HostLive do
        tools: OpenUI.LiveCase.tools(session["tools_id"]),
        components: session["components"],
        unknown_slot?: session["unknown_slot"],
-       queries: session["queries"]
+       queries: session["queries"],
+       host: session["host"]
      )}
   end
 
@@ -26,6 +27,7 @@ defmodule OpenUI.Test.HostLive do
       tool_provider={@tools}
       streaming={@streaming}
       queries={@queries}
+      host={@host}
     >
       <:unknown :if={@unknown_slot?} :let={error}><p class="unknown">{error.code}</p></:unknown>
     </OpenUI.LiveView.renderer>
@@ -34,6 +36,8 @@ defmodule OpenUI.Test.HostLive do
 
   def handle_info({:set_response, response, streaming}, socket),
     do: {:noreply, assign(socket, response: response, streaming: streaming)}
+
+  def handle_info({:set_host, host}, socket), do: {:noreply, assign(socket, host: host)}
 
   def handle_info({:openui, _id, _payload} = message, socket) do
     send(socket.assigns.test_pid, message)

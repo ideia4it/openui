@@ -32,7 +32,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
         attributes for the input (`<input {@bind} />`);
       * `@error`, the validation rule a field failed at the last submit
         (`"required"`, `"email"`, ...) or `nil`;
-      * `@loading`, true while a query of the program is loading.
+      * `@loading`, true while a query of the program is loading;
+      * `@host`, the `host` map given to the renderer, for what the host
+        knows and the program does not (a currency, the status of a record).
+        A new map re-renders the program.
 
     `tool_provider` answers `Query` and `Mutation`: a map of tool names to
     `fn args -> {:ok, data} | {:error, reason} end`, or a function
@@ -63,6 +66,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:tool_provider, :any, default: nil)
     attr(:streaming, :boolean, default: false)
     attr(:queries, :atom, default: :on_finish, values: [:on_finish, :on_statement])
+    attr(:host, :map, default: %{})
     attr(:class, :string, default: nil)
     slot(:unknown)
 
@@ -77,6 +81,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         tool_provider={@tool_provider}
         streaming={@streaming}
         queries={@queries}
+        host={@host}
         class={@class}
         unknown={@unknown}
       />

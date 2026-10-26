@@ -34,7 +34,7 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
       socket =
         assign(
           socket,
-          Map.take(assigns, [:id, :components, :tool_provider, :queries, :class, :unknown])
+          Map.take(assigns, [:id, :components, :tool_provider, :queries, :host, :class, :unknown])
         )
 
       {:ok, guarded(socket, &receive_response(&1, assigns.response, assigns.streaming))}
@@ -325,6 +325,7 @@ if Code.ensure_loaded?(Phoenix.LiveComponent) do
         HTML.render(socket.assigns.runtime, socket.assigns.components,
           target: socket.assigns.myself,
           dom_id: "program-#{socket.assigns.id}",
+          host: socket.assigns.host,
           unknown: unknown_renderer(socket.assigns.unknown)
         )
 
