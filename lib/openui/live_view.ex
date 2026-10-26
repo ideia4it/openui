@@ -16,7 +16,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `response` is the program, or a stored message with `]]>openui:` marker
     lines (`OpenUI.Message`). While `streaming` is true, pass the text
     accumulated so far; the renderer reads only what is new. Queries run when
-    `streaming` turns false.
+    `streaming` turns false, or, with `queries={:on_statement}`, as soon as the
+    statement holding each one and every statement it reads are complete: for
+    a `tool_provider` that answers from results the host already holds.
 
     `components` is a module that uses `OpenUI.LiveView.Components`. Each of
     its function components receives:
@@ -30,7 +32,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
         attributes for the input (`<input {@bind} />`);
       * `@error`, the validation rule a field failed at the last submit
         (`"required"`, `"email"`, ...) or `nil`;
-      * `@loading`, true while a query of the program is loading.
+      * `@loading`, true while a query of the program is loading;
+      * `@host`, the `host` map given to the renderer, for what the host
+        knows and the program does not (a currency, the status of a record).
+        A new map re-renders the program.
 
     `tool_provider` answers `Query` and `Mutation`: a map of tool names to
     `fn args -> {:ok, data} | {:error, reason} end`, or a function
@@ -60,6 +65,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:components, :atom, required: true)
     attr(:tool_provider, :any, default: nil)
     attr(:streaming, :boolean, default: false)
+    attr(:queries, :atom, default: :on_finish, values: [:on_finish, :on_statement])
+    attr(:host, :map, default: %{})
     attr(:class, :string, default: nil)
     slot(:unknown)
 
@@ -73,6 +80,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         components={@components}
         tool_provider={@tool_provider}
         streaming={@streaming}
+        queries={@queries}
+        host={@host}
         class={@class}
         unknown={@unknown}
       />

@@ -23,7 +23,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The assigns each function receives are described in `OpenUI.LiveView`.
     """
 
-    @reserved_assigns ~w(bind loading error)
+    @reserved_assigns ~w(bind loading error host)
 
     @doc false
     defmacro __using__(opts) do

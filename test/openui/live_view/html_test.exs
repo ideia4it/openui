@@ -25,6 +25,18 @@ defmodule OpenUI.LiveView.HTMLTest do
 
   defp cells(column), do: column |> LazyHTML.query("span.cell") |> Enum.map(&LazyHTML.text/1)
 
+  test "every component receives the host map" do
+    library = OpenUI.Test.HostLibrary
+
+    {runtime, _effects} =
+      library
+      |> OpenUI.Runtime.new()
+      |> OpenUI.Runtime.load(OpenUI.Parser.parse(~s|root = Note("Open")|, library))
+
+    {safe, []} = HTML.render(runtime, OpenUI.Test.HostUI, host: %{unit: "tickets"})
+    assert html(safe) =~ ~s|data-unit="tickets"|
+  end
+
   test "renders nested host components, bindings and action attributes" do
     runtime =
       runtime(~S"""

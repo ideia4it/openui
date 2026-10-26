@@ -27,6 +27,22 @@ defmodule OpenUI.LiveView.ComponentsTest do
     end
   end
 
+  test "refuses a catalog prop named host" do
+    assert_raise CompileError, ~r/Card.host uses the reserved assign name host/, fn ->
+      Code.compile_string(~S"""
+      defmodule HostPropLibrary do
+        use OpenUI.Library, root: "Card"
+        component "Card", description: "x", props: [host: [type: :string]]
+      end
+
+      defmodule HostPropUI do
+        use OpenUI.LiveView.Components, library: HostPropLibrary
+        def card(assigns), do: ~H""
+      end
+      """)
+    end
+  end
+
   test "refuses fields and forms that name a component the catalog lacks" do
     error =
       assert_raise CompileError, fn ->

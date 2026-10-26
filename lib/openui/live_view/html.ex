@@ -24,6 +24,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         target: Keyword.get(opts, :target),
         dom_id: Keyword.get(opts, :dom_id, "openui"),
         unknown: Keyword.get(opts, :unknown),
+        host: Keyword.get(opts, :host, %{}),
         loading?: Runtime.query_status(runtime).loading?
       }
 
@@ -95,7 +96,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
           __changed__: nil,
           bind: bind(element, ctx),
           error: Runtime.field_error(ctx.runtime, element.key),
-          loading: ctx.loading?
+          loading: ctx.loading?,
+          host: ctx.host
         })
 
       {assigns, errors}

@@ -40,6 +40,7 @@ defmodule OpenUI.Runtime do
     fields: %{},
     forms: %{},
     finished?: false,
+    query_timing: :on_finish,
     tree: nil,
     elements: %{},
     render_errors: [],
@@ -59,8 +60,12 @@ defmodule OpenUI.Runtime do
   @type t :: %__MODULE__{}
 
   @doc """
-  Starts a runtime. Options: `:fields`, `:forms` and `:state`, the state a
-  host persisted earlier, applied over the program's defaults.
+  Starts a runtime. Options: `:fields`, `:forms`, `:state`, the state a
+  host persisted earlier, applied over the program's defaults, and
+  `:queries`, when queries run: `:on_finish` (default) once the stream ends,
+  or `:on_statement` as soon as the statement holding each one and every
+  statement it reads are complete, for hosts that answer queries from results
+  they already hold.
   """
   @spec new(Library.t() | module(), keyword()) :: t()
   def new(library, opts \\ []) do
@@ -68,20 +73,27 @@ defmodule OpenUI.Runtime do
       library: Library.resolve(library),
       fields: Map.new(Keyword.get(opts, :fields, %{})),
       forms: Map.new(Keyword.get(opts, :forms, %{})),
-      store: Map.new(Keyword.get(opts, :state, %{}))
+      store: Map.new(Keyword.get(opts, :state, %{})),
+      query_timing: Keyword.get(opts, :queries, :on_finish)
     }
     |> render()
   end
 
   @doc """
   Loads a program, from a stream frame or an edit. Declared defaults apply to
-  state the person has not changed; no key is ever deleted. Nothing runs
-  until `finish/1`.
+  state the person has not changed; no key is ever deleted. Queries run at
+  `finish/1`, or here once their statement and every statement they read are
+  complete when the runtime was started with `queries: :on_statement`.
   """
   @spec load(t(), Program.t()) :: {t(), [effect()]}
   def load(%__MODULE__{} = runtime, %Program{} = program) do
     runtime = %{runtime | program: program} |> apply_defaults() |> render()
-    if runtime.finished?, do: sync_queries(runtime), else: {runtime, []}
+
+    cond do
+      runtime.finished? -> sync_queries(runtime)
+      runtime.query_timing == :on_statement -> sync_queries(runtime, settled_queries(program))
+      true -> {runtime, []}
+    end
   end
 
   @doc """
@@ -500,13 +512,44 @@ defmodule OpenUI.Runtime do
   defp form_state(runtime, nil), do: runtime.store
   defp form_state(runtime, form), do: %{form => form_fields(runtime, form)}
 
-  # Queries run once the stream ends, and again on load when an edit changed
-  # their tool or arguments.
-  defp sync_queries(runtime) do
+  # Queries run once the stream ends (or as they settle, with eager timing), and
+  # again on load when an edit changed their tool or arguments.
+  defp sync_queries(runtime), do: sync_queries(runtime, runtime.program.queries)
+
+  defp sync_queries(runtime, queries) do
     ctx = context(runtime)
-    changed = Enum.reject(runtime.program.queries, &same_request?(runtime, &1, ctx))
+    changed = Enum.reject(queries, &same_request?(runtime, &1, ctx))
     fetch_all(runtime, changed)
   end
+
+  # The stream closes a cut statement so it parses, and a name declared later
+  # reads as null: either would send the tool a half-written request, one per
+  # chunk. A query asks for its tool once its statement and every statement it
+  # reads, directly or through others, is complete.
+  defp settled_queries(program) do
+    statements = Map.new(program.statements, &{&1.id, &1})
+    Enum.filter(program.queries, &settled?(statements, &1.id, %{}))
+  end
+
+  defp settled?(statements, id, seen) do
+    case Map.fetch(statements, id) do
+      {:ok, %{pending?: false, ast: ast}} ->
+        seen = Map.put(seen, id, true)
+
+        ast
+        |> read_names()
+        |> Enum.reject(&Map.has_key?(seen, &1))
+        |> Enum.all?(&settled?(statements, &1, seen))
+
+      _pending_or_not_declared_yet ->
+        false
+    end
+  end
+
+  defp read_names({kind, name}) when kind in [:ref, :state] and is_binary(name), do: [name]
+  defp read_names(tuple) when is_tuple(tuple), do: tuple |> Tuple.to_list() |> read_names()
+  defp read_names(list) when is_list(list), do: Enum.flat_map(list, &read_names/1)
+  defp read_names(_value), do: []
 
   defp same_request?(runtime, query, ctx) do
     {tool, args} = request(query, ctx)
