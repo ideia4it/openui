@@ -83,6 +83,33 @@ end
 
 A tool the provider does not know should return `{:error, {:tool_not_found, names}}`; the error the model sees lists the names.
 
+## Streaming
+
+With `streaming: true` in the ReAct config, the run emits each piece of text as an `:llm_delta` event. Send the text so far to the LiveView and render it with `streaming={true}`. A round that ends calling tools may write text before the call, so start the answer over when a tool starts:
+
+```elixir
+question
+|> ReAct.stream(%{config | streaming: true}, context: %{results: results})
+|> Enum.each(fn
+  %{kind: :llm_delta, data: %{chunk_type: :content, delta: text}} -> send(live_view, {:answer_delta, text})
+  %{kind: :tool_started} -> send(live_view, :answer_restart)
+  _event -> :ok
+end)
+```
+
+When every tool already ran by the time the model writes the program, as here, the `tool_provider` answers from results in hand, and the pieces can fill in while the model is still writing:
+
+```heex
+<OpenUI.LiveView.renderer
+  id="answer"
+  response={@text}
+  components={MyAppWeb.UI}
+  tool_provider={@tool_provider}
+  streaming={@streaming?}
+  queries={:on_statement}
+/>
+```
+
 ## Security
 
 Every tool a program can query is a door into your data, reachable without the model. Check authorization inside each tool for the current user, as you would for any endpoint. Do not answer `Query` from a provider that trusts its arguments.
